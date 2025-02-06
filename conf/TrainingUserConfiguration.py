@@ -1,10 +1,10 @@
 from conf.params import MergeFilesParams, LocalTrainingParams
 import glob
 from conf.localConstants import constants
-from tensorflow.keras.optimizers import Adam, SGD
-import tensorflow.keras.metrics as metrics
-import tensorflow.keras.activations as activations
-import tensorflow.keras.losses as losses
+#from tensorflow.keras.optimizers import Adam, SGD
+#import tensorflow.keras.metrics as metrics
+#import tensorflow.keras.activations as activations
+#import tensorflow.keras.losses as losses
 from os.path import join
 from db.names import getContaminantsTables
 import os
