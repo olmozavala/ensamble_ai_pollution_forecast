@@ -1,6 +1,31 @@
 import numpy as np
 import xarray as xr
 from proj_preproc.utils import getEvenIndexForSplit
+import metpy.calc as mpcalc
+from metpy.units import units
+
+def calculate_relative_humidity_metpy(T2, PSFC, Q2):
+    """
+    Calculate relative humidity using MetPy library
+    
+    Args:
+        T2: 2-meter temperature (K)
+        PSFC: Surface pressure (Pa)
+        Q2: 2-meter water vapor mixing ratio (kg/kg)
+    
+    Returns:
+        RH: Relative humidity (%)
+    """
+    # Convert inputs to MetPy quantities with units
+    temperature = T2 * units.kelvin
+    pressure = PSFC * units.pascal
+    mixing_ratio = Q2 * units.dimensionless
+    
+    # Calculate relative humidity
+    RH = mpcalc.relative_humidity_from_mixing_ratio(pressure, temperature, mixing_ratio)
+    
+    # Convert to percentage and
+    return RH.magnitude * 100
 
 
 def crop_variables_xr(xr_ds, variables, bbox, times):
@@ -30,7 +55,7 @@ def crop_variables_xr_cca_reanalisis(xr_ds, variables, bbox, times, LAT, LON):
         minlat, maxlat, minlon, maxlon = bbox
         croppedVar, lat, lon = crop_variable_np(cur_var, LON=LON, LAT=LAT, minlat=minlat, maxlat=maxlat,
                                                       minlon=minlon, maxlon=maxlon, times=times)
-        output_xr_ds[cur_var_name] = xr.DataArray(croppedVar.values, coords=[('time', times), ('lat', lat), ('lon', lon)])
+        output_xr_ds[cur_var_name] = xr.DataArray(croppedVar.values, coords=[('time', range(len(times))), ('lat', lat), ('lon', lon)])
 
     return output_xr_ds, lat, lon
 
