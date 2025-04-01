@@ -4,7 +4,7 @@ import cartopy.feature as cfeature
 import cmocean
 import pandas as pd
 
-def plot_variables(ds, variable_names, output_folder, date, n_timesteps):
+def plot_variables(ds, variable_names, output_folder, date, n_timesteps, times):
     """Plot variables using cartopy with Mexico state boundaries and cmocean colormaps"""
     import cartopy.crs as ccrs
     import cartopy.feature as cfeature
@@ -92,10 +92,10 @@ def plot_variables(ds, variable_names, output_folder, date, n_timesteps):
     fig, ax = plt.subplots(1, 1, figsize=(10, 4), dpi=100)
     # Calculate mean over spatial dimensions for each timestep
     spatial_mean = ds['T2'].mean(dim=['lat', 'lon'])
-    ax.plot(spatial_mean.time, spatial_mean.values)
+    ax.plot(range(len(times)), spatial_mean.values)
     # Set the x axis ticks to be the hours
-    ax.set_xticks(range(24))
-    ax.set_xticklabels([str(i) for i in range(24)])
+    ax.set_xticks(range(len(times)))
+    ax.set_xticklabels([str((i - 6) % 24) for i in times])
     ax.set_xlabel('Time')
     ax.set_ylabel('Temperature (K)')
     ax.set_title(f'Spatial Average Temperature - {date.strftime("%Y-%m-%d")}')

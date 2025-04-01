@@ -42,11 +42,8 @@ def read_wrf_old_files_names(input_folder, start_date, end_date):
             if (dateNetCDF < end_date) & (dateNetCDF >= start_date):
                 result_files_coords.append(join(input_folder,F"a{cur_year}", 'salidas',
                             F'wrfout_c15d_d01_{cur_year}-01-01_00:00:00.a{cur_year}'))  # always read the first of jan (assuming it exist)
-                # result_files_coords.append(join(input_folder,F"a{cur_year}",
-                #                                 F'wrfout_c15d_d01_{cur_year}-01-01_00:00:00.{cur_year}'))  # always read the first of jan (assuming it exist)
                 result_files.append(curr_file)
                 result_paths.append(join(input_folder, F"a{cur_year}", 'salidas', curr_file))
-                # result_paths.append(join(input_folder, F"a{cur_year}", curr_file))
                 result_dates.append(dateNetCDF)
                 print(F'{curr_file} -- {dateNetCDF}')
 
