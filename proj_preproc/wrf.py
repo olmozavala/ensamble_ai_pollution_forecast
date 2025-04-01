@@ -6,7 +6,7 @@ from proj_preproc.utils import getEvenIndexForSplit
 def crop_variables_xr(xr_ds, variables, bbox, times):
     output_xr_ds = xr.Dataset()
     for cur_var_name in variables:
-        print(F"\t\t {cur_var_name}")
+        # print(F"\t\t {cur_var_name}")
         cur_var = xr_ds[cur_var_name]
         cur_coords_names = list(cur_var.coords.keys())
         # TODO the order here is hardcoded, need to verify it always work for WRF
@@ -15,24 +15,24 @@ def crop_variables_xr(xr_ds, variables, bbox, times):
         lon = cur_var.coords[cur_coords_names[1]].values
 
         minlat, maxlat, minlon, maxlon = bbox
-        croppedVar, newLat, newLon = crop_variable_np(cur_var, LON=lon, LAT=lat, minlat=minlat, maxlat=maxlat,
+        croppedVar, lat, lon = crop_variable_np(cur_var, LON=lon, LAT=lat, minlat=minlat, maxlat=maxlat,
                                                       minlon=minlon, maxlon=maxlon, times=times)
-        output_xr_ds[cur_var_name] = xr.DataArray(croppedVar.values, coords=[('newtime', times), ('newlat', newLat), ('newlon', newLon)])
+        output_xr_ds[cur_var_name] = xr.DataArray(croppedVar.values, coords=[('time', times), ('lat', lat), ('lon', lon)])
 
-    return output_xr_ds, newLat, newLon
+    return output_xr_ds, lat, lon
 
 
 def crop_variables_xr_cca_reanalisis(xr_ds, variables, bbox, times, LAT, LON):
     output_xr_ds = xr.Dataset()
     for cur_var_name in variables:
-        print(F"\t\t {cur_var_name}")
+        # print(F"\t\t {cur_var_name}")
         cur_var = xr_ds[cur_var_name]
         minlat, maxlat, minlon, maxlon = bbox
-        croppedVar, newLat, newLon = crop_variable_np(cur_var, LON=LON, LAT=LAT, minlat=minlat, maxlat=maxlat,
+        croppedVar, lat, lon = crop_variable_np(cur_var, LON=LON, LAT=LAT, minlat=minlat, maxlat=maxlat,
                                                       minlon=minlon, maxlon=maxlon, times=times)
-        output_xr_ds[cur_var_name] = xr.DataArray(croppedVar.values, coords=[('newtime', times), ('newlat', newLat), ('newlon', newLon)])
+        output_xr_ds[cur_var_name] = xr.DataArray(croppedVar.values, coords=[('time', times), ('lat', lat), ('lon', lon)])
 
-    return output_xr_ds, newLat, newLon
+    return output_xr_ds, lat, lon
 
 
 def crop_variable_np(np_data, LON, LAT, minlat, maxlat, minlon, maxlon, times):
@@ -64,8 +64,8 @@ def crop_variable_np(np_data, LON, LAT, minlat, maxlat, minlon, maxlon, times):
         # maxLonVal = LON[maxLonIdx]
         # Just for debugging end
 
-        newLAT = LAT[minLatIdx:maxLatIdx]
-        newLon = LON[minLonIdx:maxLonIdx]
+        lat = LAT[minLatIdx:maxLatIdx]
+        lon = LON[minLonIdx:maxLonIdx]
 
         croppedVar = np_data[times,minLatIdx:maxLatIdx, minLonIdx:maxLonIdx]
 
@@ -82,12 +82,12 @@ def crop_variable_np(np_data, LON, LAT, minlat, maxlat, minlon, maxlon, times):
         # maxLonVal = LON[0,0,maxLonIdx]
         # Just for debugging end
 
-        newLAT = LAT[0,minLatIdx:maxLatIdx, 0]
-        newLon = LON[0,0,minLonIdx:maxLonIdx]
+        lat = LAT[0,minLatIdx:maxLatIdx, 0]
+        lon = LON[0,0,minLonIdx:maxLonIdx]
 
         croppedVar = np_data[times,minLatIdx:maxLatIdx, minLonIdx:maxLonIdx]
 
-    return croppedVar, newLAT, newLon
+    return croppedVar, lat, lon
 
 
 def subsampleData(xr_ds, variables, num_rows, num_cols):
@@ -112,8 +112,8 @@ def subsampleData(xr_ds, variables, num_rows, num_cols):
     lat_splits_idx = getEvenIndexForSplit(len(lat_vals), num_rows)
     lon_splits_idx = getEvenIndexForSplit(len(lon_vals), num_cols)
 
-    newlat = [lat_vals[i:j].mean() for i,j in lat_splits_idx]
-    newlon = [lon_vals[i:j].mean() for i,j in lon_splits_idx]
+    lat = [lat_vals[i:j].mean() for i,j in lat_splits_idx]
+    lon = [lon_vals[i:j].mean() for i,j in lon_splits_idx]
 
     for cur_var_name in variables:
         cur_var = xr_ds[cur_var_name].values
@@ -129,9 +129,9 @@ def subsampleData(xr_ds, variables, num_rows, num_cols):
                     lon_end = lon_splits_idx[cur_col][1]
                     mean_2d_array[i, cur_row, cur_col] = cur_var[i, lat_start:lat_end, lon_start:lon_end].mean()
 
-        output_xr_ds[cur_var_name] = xr.DataArray(mean_2d_array, coords=[('newtime', range(num_hours)),
-                                                                         ('newlat', newlat),
-                                                                         ('newlon', newlon)])
+        output_xr_ds[cur_var_name] = xr.DataArray(mean_2d_array, coords=[('time', range(num_hours)),
+                                                                         ('lat', lat),
+                                                                         ('lon', lon)])
         # viz_obj.plot_3d_data_singlevar_np(output_array, z_levels=range(len(output_array)),
         #                                   title=F'Shape: {num_rows}x{num_cols}',
         #                                   file_name_prefix='AfterCroppingAndSubsampling')
