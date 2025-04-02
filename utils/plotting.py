@@ -3,15 +3,35 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import cmocean
 import pandas as pd
+from netCDF4 import num2date
 
-def plot_variables(ds, variable_names, output_folder, date, n_timesteps, times):
-    """Plot variables using cartopy with Mexico state boundaries and cmocean colormaps"""
-    import cartopy.crs as ccrs
-    import cartopy.feature as cfeature
-    import cmocean
+def plot_variables(ds, variable_names, output_folder, n_timesteps, times=range(24)):
+    """Plot variables from a dataset using cartopy with Mexico state boundaries and cmocean colormaps.
+    
+    Args:
+        ds (xarray.Dataset): Dataset containing the variables to plot
+        variable_names (list): List of variable names to plot
+        output_folder (str): Directory path where plots will be saved
+        date (datetime): Date of the data being plotted
+        n_timesteps (int): Number of timesteps to plot
+        times (range): Range of timesteps to plot
+        
+    The function creates a multi-panel figure with one column per variable and one row per timestep.
+    Each panel shows a map of Mexico with state boundaries and the variable plotted using cmocean
+    colormaps. The plots are saved to the specified output folder with the date in the filename.
+    """
 
+    time_var = ds['time']
+    time_units = time_var.attrs['units']
+    time_calendar = time_var.attrs.get('calendar', 'standard')  # optional fallback
 
-    date_str = date.strftime('%Y-%m-%d')
+    dates = num2date(time_var.values, units=time_units, calendar=time_calendar, only_use_cftime_datetimes=False)
+
+    # Get the first hour of the day
+    start_date = dates[0]
+    # Take the 'date' form the middle of the day
+    middle_date = start_date + pd.Timedelta(hours=12)
+    date_str = middle_date.strftime('%Y-%m-%d')
     print(F"Plotting variables for {date_str}")
 
     # Define colormaps for different variables
@@ -59,33 +79,33 @@ def plot_variables(ds, variable_names, output_folder, date, n_timesteps, times):
     # Turn off interactive plotting
     plt.ioff()
 
-    # for time_idx in range(n_timesteps):
-    #     for var_idx, var_name in enumerate(variable_names):
-    #         ax = axes[time_idx, var_idx]
+    for time_idx in range(n_timesteps):
+        for var_idx, var_name in enumerate(variable_names):
+            ax = axes[time_idx, var_idx]
             
-    #         # Plot with simplified settings
-    #         ds[var_name].isel(time=time_idx).plot(
-    #             ax=ax,
-    #             transform=ccrs.PlateCarree(),
-    #             cmap=var_colormaps.get(var_name, 'viridis'),
-    #             add_colorbar=True,
-    #             cbar_kwargs={'fraction': 0.016, 'pad': 0.18}
-    #         )
+            # Plot with simplified settings
+            ds[var_name].isel(time=time_idx).plot(
+                ax=ax,
+                transform=ccrs.PlateCarree(),
+                cmap=var_colormaps.get(var_name, 'viridis'),
+                add_colorbar=True,
+                cbar_kwargs={'fraction': 0.016, 'pad': 0.18}
+            )
             
-    #         # Add features with explicit zorder to ensure visibility
-    #         ax.add_feature(states, linewidth=0.5, zorder=5)
-    #         ax.coastlines(resolution='50m', zorder=5)
-    #         ax.gridlines(draw_labels=True, linestyle='--', alpha=0.5)
+            # Add features with explicit zorder to ensure visibility
+            ax.add_feature(states, linewidth=0.5, zorder=5)
+            ax.coastlines(resolution='50m', zorder=5)
+            ax.gridlines(draw_labels=True, linestyle='--', alpha=0.5)
             
-    #         ax.set_extent(extent)
-    #         cur_date = date + pd.Timedelta(hours=time_idx)
-    #         time_str = cur_date.strftime('%Y-%m-%d %H:00')
-    #         ax.set_title(F"{var_name} - {time_str}")
+            ax.set_extent(extent)
+            cur_date = start_date + pd.Timedelta(hours=time_idx)
+            time_str = cur_date.strftime('%Y-%m-%d %H:00')
+            ax.set_title(F"{var_name} - {time_str}")
 
-    # plt.tight_layout()
-    # fig.savefig(f"{output_folder}/{date.strftime('%Y-%m-%d')}.png", 
-    #             bbox_inches='tight', dpi=300)
-    # plt.close(fig)
+    plt.tight_layout()
+    fig.savefig(f"{output_folder}/{date_str}.png", 
+                bbox_inches='tight', dpi=300)
+    plt.close(fig)
 
     
     print("Plotting spatial average T2 timeseries")
@@ -98,11 +118,11 @@ def plot_variables(ds, variable_names, output_folder, date, n_timesteps, times):
     ax.set_xticklabels([str((i - 6) % 24) for i in times])
     ax.set_xlabel('Time')
     ax.set_ylabel('Temperature (K)')
-    ax.set_title(f'Spatial Average Temperature - {date.strftime("%Y-%m-%d")}')
+    ax.set_title(f'Spatial Average Temperature - {date_str}')
     ax.grid(True, linestyle='--', alpha=0.5)
-    plt.savefig(f"{output_folder}/{date.strftime('%Y-%m-%d')}_T2_spatial_avg_timeseries.png", 
+    plt.savefig(f"{output_folder}/{date_str}_T2_spatial_avg_timeseries.png", 
                 bbox_inches='tight', dpi=300)
     plt.close(fig)
 
-    print(f"Done plotting {date.strftime('%Y-%m-%d')}")
+    print(f"Done plotting {date_str}")
 
