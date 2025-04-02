@@ -120,7 +120,7 @@ test_year = 2013
 batch_size = 2048  # 32  # 4096
 
 # Dataset features and additional configurations
-sequence_length = 12
+sequence_length = 6
 num_ar_features = 106
 num_flag_features = 106
 num_var_features = 12
@@ -827,10 +827,10 @@ val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 optimizer = optim.Adam(base_predictor.parameters(), lr=learning_rate_base)
 criterion = nn.MSELoss()
 
-
 def train_base_predictor(
     base_predictor,
     train_loader,
+    val_loader,
     device,
     model_name,
     criterion,
@@ -839,11 +839,12 @@ def train_base_predictor(
     learning_rate=0.01,
 ):
     """
-    Trains the base predictor model.
+    Trains the base predictor model with validation.
 
     Args:
         base_predictor (nn.Module): The base predictor model.
         train_loader (DataLoader): The DataLoader for the training data.
+        val_loader (DataLoader): The DataLoader for the validation data.
         device (str): The device to use ('cuda' or 'cpu').
         model_name (str): The name of the model for TensorBoard logging.
         num_epochs (int, optional): The number of training epochs. Defaults to 100.
@@ -858,6 +859,7 @@ def train_base_predictor(
 
     # Training loop
     for epoch in range(num_epochs_base):
+        base_predictor.train()
         epoch_loss = 0.0
         for x_batch, f_batch, v_batch, y_batch in train_loader:
             x_batch, f_batch, v_batch, y_batch = (
@@ -880,11 +882,38 @@ def train_base_predictor(
 
             epoch_loss += loss.item()
 
-        # Log the average loss for the epoch
-        avg_loss = epoch_loss / len(train_loader)
-        writer.add_scalar("Loss/train", avg_loss, epoch)
+        # Log the average training loss for the epoch
+        avg_train_loss = epoch_loss / len(train_loader)
+        writer.add_scalar("Loss/train", avg_train_loss, epoch)
 
-        print(f"Epoch: {epoch+1}/{num_epochs_base}, Loss: {avg_loss:.4f}")
+        # Validation loop
+        base_predictor.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for x_batch, f_batch, v_batch, y_batch in val_loader:
+                x_batch, f_batch, v_batch, y_batch = (
+                    x_batch.to(device),
+                    f_batch.to(device),
+                    v_batch.to(device),
+                    y_batch.to(device),
+                )
+
+                # Reshape the input tensors to match the expected input shape of the model
+                x_batch = x_batch.reshape(x_batch.size(0), -1)
+                f_batch = f_batch.reshape(f_batch.size(0), -1)
+                v_batch = v_batch.reshape(v_batch.size(0), -1)
+
+                outputs = base_predictor(x_batch, f_batch, v_batch)
+                loss = criterion(outputs, y_batch)
+                val_loss += loss.item()
+
+        # Log the average validation loss for the epoch
+        avg_val_loss = val_loss / len(val_loader)
+        writer.add_scalar("Loss/val", avg_val_loss, epoch)
+
+        print(
+            f"Epoch: {epoch+1}/{num_epochs_base}, Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}"
+        )
 
     # Close the TensorBoard writer
     writer.close()
@@ -896,6 +925,7 @@ def train_base_predictor(
 base_predictor = train_base_predictor(
     base_predictor,
     train_loader,
+    val_loader,
     device,
     model_name,
     criterion,
