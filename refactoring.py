@@ -233,7 +233,7 @@ def plot_time_series_predictions(
     sequence_length,
     device,
     num_points=200,
-    target_column_index=0,
+    target_column_index=0,data_imputed_names=None
 ):
     """
     Plots a time series of predictions vs. actual values for a specific column over a sequence of data points.
@@ -303,9 +303,11 @@ def plot_time_series_predictions(
     plt.figure(figsize=(16, 6))
     plt.plot(actual_values, label="Actual Values", marker="o", linestyle="-")
     plt.plot(predictions, label="Predictions", marker="x", linestyle="-")
-
+    column_name = None
+    if data_imputed_names is not None:
+        column_name = data_imputed_names[target_column_index]
     plt.title(
-        f"Time Series Predictions vs Actual Values (Column: {target_column_index}, {num_points} points)"
+        f"Time Series Predictions vs Actual Values (Column: {target_column_index} {column_name}, {num_points} points)"
     )
     plt.xlabel("Time Step")
     plt.ylabel("Value")
