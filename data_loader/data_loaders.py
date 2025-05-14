@@ -51,9 +51,6 @@ class MLforecastDataset(Dataset):
         self.pollution_data: DataFrame = preproc_pollution(pollution_folder, years)
         self.weather_data: XDataset = preproc_weather(weather_folder, years)
         
-        visualize_pollutant_vs_weather_var(self.pollution_data, self.weather_data, output_file=join(pollution_folder, "imgs", "pollution_vs_weather.png"),
-                                          pollutant_col='cont_otres_MER', weather_var='T2')
-
         self.weather_data, self.pollution_data = intersect_dates(
             self.pollution_data, self.weather_data)
 

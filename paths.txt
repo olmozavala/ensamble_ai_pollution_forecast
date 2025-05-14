@@ -1,0 +1,9 @@
+
+=== Quetzal ===
+/home/olmozavala/DATA/AirPollution/WRF_NetCDF/
+/home/olmozavala/DATA/AirPollution/WRF_NetCDF_imgs/
+/home/olmozavala/DATA/AirPollution/PollutionCSV/
+
+=== Zion ===
+/ZION/AirPollutionData/Data/MergedDataCSV/16/Imputed/bk1/
+/home/pedro/netcdfs

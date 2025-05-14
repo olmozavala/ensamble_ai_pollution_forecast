@@ -1,0 +1,8 @@
+===== Add ncdump ==== 
+
+ml load intel/2022u2
+ml load netcdf-c
+type -a ncdump
+
+source /LUSTRE/ID/hidromet/SECTEI-2025/scripts/miniforge/etc/profile.d/conda.sh
+conda activate python-ncar

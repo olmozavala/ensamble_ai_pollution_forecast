@@ -255,6 +255,6 @@ if __name__== '__main__':
     years = range(2010, 2025)
     # years = [2021]
     generate_images = True
-    parallel = False
+    parallel = True
 
     process_files(years, variable_names, output_folder, output_folder_imgs, resolution, bbox, generate_images, parallel)

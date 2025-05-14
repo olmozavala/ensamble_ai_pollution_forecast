@@ -21,7 +21,7 @@ def visualize_pollutant_vs_weather_var(pollution_data: DataFrame, weather_data: 
     print(f"Visualizing pollution ({pollutant_col}) vs weather ({weather_var})...")
     # Validate that they are 'aligned' by plotting the first 48 hours of cont_otres_AJU from pollution with
     # average of T2M from weather
-    ozone = pollution_data[pollutant_col][hours_to_plot]
+    ozone = pollution_data.iloc[hours_to_plot][pollutant_col]
     temp = weather_data[weather_var][hours_to_plot].mean(dim=['lat', 'lon'])
         
     # Create figure with two y-axes
