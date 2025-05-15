@@ -12,8 +12,10 @@ def create_normalization_data(output_file: str, pollution_data: DataFrame, weath
     Create normalization data for pollution and weather data.
     """
 
-    pollutants = ['co', 'no', 'nodos', 'nox', 'otres', 'pmco', 'pmdoscinco', 'pmdiez', 'sodos']
-    weather_vars = ['T2', 'U10', 'V10', 'SWDOWN', 'GLW','RH', 'RAIN', 'WS10']
+    # Get the pollutants to keep from unique values of columns that start with 'cont_'
+    pollutants = list(set([col.split('_')[-2] for col in pollution_data.columns if col.startswith('cont_')]))
+
+    weather_vars = list(weather_data.data_vars)
 
     norm_params = {'pollutants': {}, 'weather': {}}
     # Check if the file exists
@@ -26,7 +28,6 @@ def create_normalization_data(output_file: str, pollution_data: DataFrame, weath
         
         # Get the data for the pollutant (filter all that contain the pollutant)
         pol_columns = [col for col in pollution_data.columns if col.startswith(f'cont_{pollutant}')]
-        print(pol_columns)
 
         # For each pollutant get the mean and std value
         mean = pollution_data[pol_columns].mean().mean()
@@ -82,7 +83,7 @@ def normalize_data(norm_params_file: str, pollution_data: DataFrame, weather_dat
 
         # Get all the columns that start with the cont_pollutant
         pol_columns = [col for col in pollution_data.columns if col.startswith(f'cont_{pollutant}')]
-        print(pol_columns)
+        # print(pol_columns)
 
         # Normalize the data
         pollution_data[pol_columns] = (pollution_data[pol_columns] - mean) / std
@@ -118,7 +119,7 @@ def denormalize_data(norm_params_file: str, pollution_data: DataFrame, weather_d
 
         # Get all the columns that start with the cont_pollutant
         pol_columns = [col for col in pollution_data.columns if col.startswith(f'cont_{pollutant}')]
-        print(pol_columns)
+        # print(pol_columns)
 
         # Denormalize the data
         pollution_data[pol_columns] = (pollution_data[pol_columns] * std) + mean
@@ -141,14 +142,17 @@ if __name__ == "__main__":
     output_imgs_folder = "/home/olmozavala/CODE/ensamble_ai_pollution_forecast/imgs"
     pollution_folder = join(root_folder, "PollutionCSV")
     weather_folder = join(root_folder, "WRF_NetCDF")
+    keep_pollutants = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco']
     # years = list(range(2010, 2021))  # 2010 to 2020 inclusive
     years = [2010]
+    start_year = min(years)
+    end_year = max(years)
 
-    pollution_data: DataFrame = preproc_pollution(pollution_folder, years)
+    pollution_data: DataFrame = preproc_pollution(pollution_folder, years, keep_pollutants)
     weather_data: Dataset = preproc_weather(weather_folder, years)
 
     # Create the normalization data
-    norm_params_file = join(root_folder, 'TrainingData', "norm_params.pkl")
+    norm_params_file = join(root_folder, 'TrainingData', f"norm_params_{start_year}_to_{end_year}.pkl")
     create_normalization_data(norm_params_file, pollution_data, weather_data, overwrite=False)
 
     # Normalize the data
@@ -165,5 +169,6 @@ if __name__ == "__main__":
 
     # Visualize the denormalized data
     for weather_var in weather_vars:
-        visualize_pollutant_vs_weather_var(pollution_data, weather_data, output_file=join(output_imgs_folder, f"denormalized_{pol_col}_{weather_var}.png"),
+        visualize_pollutant_vs_weather_var(pollution_data, weather_data, 
+                                           output_file=join(output_imgs_folder, f"denormalized_{pol_col}_{weather_var}.png"),
                                             pollutant_col=pol_col, weather_var=weather_var)

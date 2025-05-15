@@ -1,19 +1,18 @@
 from typing import List, Optional, Callable
-import torch
-from torchvision import datasets, transforms
-from base import BaseDataLoader
-from preproc_data import preproc_pollution, preproc_weather, intersect_dates, visualize_pollutant_vs_weather_var
-import xarray as xr
+from proj_preproc.normalization import normalize_data, denormalize_data
+from proj_preproc.viz import visualize_pollutant_vs_weather_var
 import os
 from os.path import join
-import pandas as pd
-import re
-import numpy as np
 from torch.utils.data import Dataset
 from pandas import DataFrame
 from xarray import Dataset as XDataset
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
+import numpy as np
+import pickle
+import pandas as pd
+from base import BaseDataLoader
+from preproc_data import preproc_pollution, preproc_weather, intersect_dates
+import torch
+import time
 
 class MLforecastDataset(Dataset):
     """
@@ -23,7 +22,7 @@ class MLforecastDataset(Dataset):
         pollution_folder (str): Path to folder containing pollution CSV files
         weather_folder (str): Path to folder containing weather netCDF files
         years (list): List of years to process
-        prev_pol_hours (int, optional): Number of previous hours of pollution data to use. Defaults to 24.
+        prev_pollutant_hours (int, optional): Number of previous hours of pollution data to use. Defaults to 24.
         prev_weather_hours (int, optional): Number of previous hours of weather data to use. Defaults to 2.
         next_weather_hours (int, optional): Number of future hours of weather data to predict. Defaults to 1.
         transform (callable, optional): Optional transform to be applied to samples
@@ -37,30 +36,90 @@ class MLforecastDataset(Dataset):
     def __init__(self, 
                  pollution_folder: str, 
                  weather_folder: str, 
+                 norm_params_file: str,
+                 training_folder: str,
                  years: List[int], 
-                 prev_pol_hours: int = 24, 
+                 pollutants_to_keep: List[str],
+                 prev_pollutant_hours: int = 24, 
                  prev_weather_hours: int = 2,
                  next_weather_hours: int = 1, 
+                 auto_regresive_steps: int = 1,
                  transform: Optional[Callable] = None) -> None:
         """Initialize the dataset."""
 
-        self.prev_pol_hours = prev_pol_hours
+        # Save the data to pickle files with year range in filename
+        start_year = min(years)
+        end_year = max(years)
+
+        pollution_data_file = join(training_folder, f'pollution_data_{start_year}_to_{end_year}.pkl')
+        weather_data_file = join(training_folder, f'weather_data_{start_year}_to_{end_year}.pkl')
+
+        self.prev_pollutant_hours = prev_pollutant_hours
         self.prev_weather_hours = prev_weather_hours
         self.next_weather_hours = next_weather_hours
+        self.auto_regresive_steps = auto_regresive_steps
 
-        self.pollution_data: DataFrame = preproc_pollution(pollution_folder, years)
-        self.weather_data: XDataset = preproc_weather(weather_folder, years)
-        
-        self.weather_data, self.pollution_data = intersect_dates(
-            self.pollution_data, self.weather_data)
+        self.data = {}
+        # if not os.path.exists(pollution_data_file) or not os.path.exists(weather_data_file):
+        if True:
+            print("Preprocessing data and saving to pickle files")
+            pollution_data: DataFrame = preproc_pollution(pollution_folder, years, pollutants_to_keep)
+            weather_data: XDataset = preproc_weather(weather_folder, years)
+            
+            pollution_data, weather_data = intersect_dates( pollution_data, weather_data)
 
-        # Save both arrays as pickle files together
-        
+            # Normalize data
+            pollution_data, weather_data_xarray = normalize_data(norm_params_file, pollution_data, weather_data)
+
+            self.pollution_data = pollution_data
+
+            # Concatenate weather data and transform to numpy array
+            print("Concatenating weather data and transforming to numpy array")
+            weather_vars = list(weather_data_xarray.data_vars)
+            weather_arrays = [weather_data_xarray[var].values.astype(np.float32) for var in weather_vars]
+            weather_array = np.array(weather_arrays)
+            # Switch first and second axis
+            self.weather_data = weather_array.swapaxes(1, 0)
+            print(f"Weather array final shape: {weather_array.shape}")
+
+            with open(join(training_folder, f'pollution_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
+                pickle.dump(self.pollution_data, f)
+            with open(join(training_folder, f'weather_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
+                pickle.dump(self.weather_data, f)
+
+            # ================== Only for visualization ==================
+            self.pollutant_imputed_columns = [col for col in self.pollution_data.columns if col.startswith('i_cont_')]
+
+            # Save the imputed columns to a separate dataframe
+            self.pollutant_imputed_data = self.pollution_data[self.pollutant_imputed_columns]
+
+            list_stations = ['cont_otres_PED', 'cont_otres_MER', 'cont_otres_UIZ', 'cont_otres_AJU']
+            weather_vars = list(weather_data_xarray.data_vars)
+            # Visualize the data
+            for station in list_stations:
+                for weather_var in weather_vars:
+                    visualize_pollutant_vs_weather_var(self.pollution_data, 
+                                                        self.weather_data, 
+                                                        self.pollutant_imputed_data,
+                                                        join(training_folder, 'imgs', f'pollutant_vs_weather_var_{start_year}_to_{end_year}.png'),
+                                                        pollutant_col=station, weather_var=weather_var, hours_to_plot=range(48))
+
+        else:
+            print("Loading data from pickle files")
+            self.pollution_data = pd.read_pickle(pollution_data_file)
+            self.weather_data = pd.read_pickle(weather_data_file)
+
+        # Select all the columns that start with 'i_cont_' (imputed continuous pollutants)
+        self.pollutant_imputed_columns = [col for col in self.pollution_data.columns if col.startswith('i_cont_')]
+
+        # Save the imputed columns to a separate dataframe
+        self.pollutant_imputed_data = self.pollution_data[self.pollutant_imputed_columns]
+        # Remove the imputed columns from the pollution data
+        self.pollution_data = self.pollution_data.drop(columns=self.pollutant_imputed_columns)
+            
         self.total_dates: int = len(self.pollution_data)
-        self.features: np.ndarray = self.weather_data.to_array().values
+        self.dates = self.pollution_data.index
         self.transform = transform
-
-
         print("Done initializing dataset!")
     
     def __len__(self) -> int:
@@ -70,7 +129,33 @@ class MLforecastDataset(Dataset):
     def __getitem__(self, idx: int) -> int:
         """Get a single sample from the dataset."""
 
-        return 0
+        start_time = time.time()
+        
+        # Validate that the index is within the bounds of the dataset considering the previous and next weather hours
+        while idx < self.prev_pollutant_hours or idx >= self.total_dates - self.next_weather_hours - self.auto_regresive_steps:
+            idx = np.random.randint(0, self.total_dates)
+        validation_time = time.time() - start_time
+
+        # Get the pollution data for the previous hours up to current index
+        pollution_data = self.pollution_data.iloc[idx-self.prev_pollutant_hours:idx]
+        weather_data = self.weather_data[idx-self.prev_weather_hours:idx + self.next_weather_hours + self.auto_regresive_steps]
+        imputed_pollutant_data = self.pollutant_imputed_data.iloc[idx:idx + self.auto_regresive_steps]
+        data_loading_time = time.time() - start_time - validation_time
+        
+        # Convert numpy arrays to tensors
+        x = [torch.FloatTensor(pollution_data.to_numpy().astype(np.float32)), 
+             torch.FloatTensor(weather_data.astype(np.float32))]
+        y = [torch.FloatTensor(self.pollution_data.iloc[idx].to_numpy().astype(np.float32)), 
+             torch.FloatTensor(imputed_pollutant_data.to_numpy().astype(np.float32))]
+        tensor_conversion_time = time.time() - start_time - validation_time - data_loading_time 
+
+        # print(f"Timing breakdown:")
+        # print(f"  Validation: {validation_time:.4f}s")
+        # print(f"  Data loading: {data_loading_time:.4f}s") 
+        # print(f"  Tensor conversion: {tensor_conversion_time:.4f}s")
+        # print(f"  Total time: {time.time() - start_time:.4f}s")
+
+        return x, y
 
 
 class MLforecastDataLoader(BaseDataLoader):
@@ -87,15 +172,13 @@ class MLforecastDataLoader(BaseDataLoader):
         num_workers (int, optional): Number of worker processes for data loading. Defaults to 1.
     """
     def __init__(self, 
-                 pollution_folder: str, 
-                 weather_folder: str, 
-                 years: List[int], 
+                 dataset: MLforecastDataset,
                  batch_size: int, 
                  shuffle: bool = True,
                  validation_split: float = 0.0, 
                  num_workers: int = 1) -> None:
         """Initialize the data loader."""
-        self.dataset = MLforecastDataset(pollution_folder, weather_folder, years)
+        self.dataset = dataset
         super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
 
     
@@ -104,23 +187,38 @@ if __name__ == '__main__':
     root_folder = "/home/olmozavala/DATA/AirPollution"
     pollution_folder = join(root_folder, "PollutionCSV")
     weather_folder = join(root_folder, "WRF_NetCDF")
+    training_folder = join(root_folder, "TrainingData")
     years = [2010]
-    batch_size = 32
+
+    start_year = min(years)
+    end_year = max(years)
+
+    norm_params_file = join(training_folder, f"norm_params_{start_year}_to_{end_year}.pkl")
+    pollutants_to_keep = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco']
+    # Data loader parameters
+    batch_size = 8
+    prev_pollutant_hours = 24
+    prev_weather_hours = 1
+    next_weather_hours = 1
+    auto_regresive_steps = 1
     
-    # Create dataset instance
-    dataset = MLforecastDataset(pollution_folder, weather_folder, years)
-    print(f"Dataset size: {len(dataset)}")
-    
+    dataset = MLforecastDataset(
+        pollution_folder, weather_folder, norm_params_file, training_folder, years, pollutants_to_keep,
+        prev_pollutant_hours, prev_weather_hours, next_weather_hours, auto_regresive_steps)
+       
     # Create dataloader
-    # dataloader = MLforecastDataLoader(
-    #     pollution_folder=pollution_folder,
-    #     weather_folder=weather_folder,
-    #     years=years,
-    #     batch_size=batch_size,
-    #     shuffle=True
-    # )
+    dataloader = MLforecastDataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=True
+    )
     
-    # # Test loading a batch
-    # for batch_idx, batch in enumerate(dataloader):
-    #     print(f"Batch {batch_idx} shape: {batch.shape}")
-    #     break
+    # Test loading a batch
+    for batch_idx, batch in enumerate(dataloader):
+        # Print the shape of each element in the batch (x, y)
+        print(f"Batch {batch_idx}")
+        print(f"  x pollution shape: {batch[0][0].shape}")
+        print(f"  x weather shape: {batch[0][1].shape}")
+        print(f"  y pollution shape: {batch[1][0].shape}")
+        print(f"  y imputed pollution shape: {batch[1][1].shape}")
+        break

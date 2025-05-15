@@ -2,9 +2,14 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from pandas import DataFrame
 from xarray import Dataset
+import numpy as np
 
-def visualize_pollutant_vs_weather_var(pollution_data: DataFrame, weather_data: Dataset, output_file: str, 
-                                        pollutant_col: str = 'cont_otres_MER', weather_var: str = 'T2',
+def visualize_pollutant_vs_weather_var(pollution_data: DataFrame, 
+                                       weather_data: Dataset, 
+                                       imputed_hours: DataFrame = None,
+                                       output_file: str = 'pollutant_vs_weather_var.png', 
+                                       pollutant_col: str = 'cont_otres_MER', 
+                                       weather_var: str = 'T2',
                                        hours_to_plot: range = range(48)) -> None:
     """
     Create visualization comparing pollution (ozone) and weather (temperature) data.
@@ -23,7 +28,8 @@ def visualize_pollutant_vs_weather_var(pollution_data: DataFrame, weather_data: 
     # average of T2M from weather
     ozone = pollution_data.iloc[hours_to_plot][pollutant_col]
     temp = weather_data[weather_var][hours_to_plot].mean(dim=['lat', 'lon'])
-        
+    current_imputed_hours = imputed_hours.iloc[hours_to_plot][f"i_{pollutant_col}"]
+
     # Create figure with two y-axes
     fig, ax1 = plt.subplots(figsize=(12, 6))
     ax2 = ax1.twinx()
@@ -32,6 +38,11 @@ def visualize_pollutant_vs_weather_var(pollution_data: DataFrame, weather_data: 
     ax1.plot(ozone.index, ozone.values, 'grey', label=pollutant_col)
     ax1.set_ylabel(pollutant_col, color='grey')
     ax1.tick_params(axis='y', labelcolor='grey')
+
+    # If imputed_hours is not None, plot the imputed hours as scatter plot
+    if imputed_hours is not None:
+        ax1.scatter(current_imputed_hours.index, current_imputed_hours.to_numpy(), color='blue', label='Imputed', s=20)
+        ax1.tick_params(axis='y', labelcolor='blue')
     
     # Plot temperature on right y-axis
     ax2.plot(temp.time, temp.values, 'darkred', label=weather_var)

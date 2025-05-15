@@ -34,7 +34,7 @@ def read_pollution_data(pollution_folder: str, years: List[int]) -> List[DataFra
 
     return pollution_data
 
-def preproc_pollution(pollution_folder: str, years: List[int]) -> DataFrame:
+def preproc_pollution(pollution_folder: str, years: List[int], pollutants_to_keep: List[str] = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco']) -> DataFrame:
     """
     Preprocess pollution data by removing unused columns and combining years.
     
@@ -49,7 +49,7 @@ def preproc_pollution(pollution_folder: str, years: List[int]) -> DataFrame:
             - Combined data from all years
     """
     pollution_data: DataFrame = pd.concat(read_pollution_data(pollution_folder, years))
-                
+
     # %% Preprocess pollution data
     names = pollution_data.columns
     print(f"Total rows: {len(pollution_data)}. Total columns: {len(names)}.")
@@ -80,11 +80,35 @@ def preproc_pollution(pollution_folder: str, years: List[int]) -> DataFrame:
     pollution_data = pollution_data.drop(columns=atmos_columns)
     # Remove all met_columns
     pollution_data = pollution_data.drop(columns=met_columns)
+    # Remove all columns that contain 'cont_' but do not contain any of the pollutants_to_keep
+    all_cont_cols = [col for col in pollution_data.columns if 'cont_' in col]
+    columns_to_keep = []
+    for keep_col in pollutants_to_keep:
+        current_keep = [col for col in all_cont_cols if keep_col == col.split('_')[-2]]
+        columns_to_keep.extend(current_keep)
 
-    # Print total remaining columns
+    # Drop all columns that are not in columns_to_keep
+    cols_to_drop = [col for col in all_cont_cols if col not in columns_to_keep]
+
+    pollution_data = pollution_data.drop(columns=cols_to_drop)
+
+    remaining_columns = pollution_data.columns
+    cont_columns: List[str] = [col for col in remaining_columns if col.startswith('cont_')]
+    i_cont_columns: List[str] = [col for col in remaining_columns if col.startswith('i_cont_')]
+    time_columns: List[str] = [col for col in remaining_columns if col.endswith(('day', 'week', 'year'))]
+
+    # Print remaining columns
     print(f"Total remaining columns: {len(pollution_data.columns)}")
+    print(f"cont_: {len(cont_columns)}")
+    print(f"i_cont_: {len(i_cont_columns)}") 
+    print(f"time_: {len(time_columns)}")
 
     print(f"First 5 dates: {pollution_data.index[:5]}")
+
+    # Replacing inmputed values with 0 or 1. none -> 0, row_avg -> 1, last_day_same_hour -> 1
+    print(f"Replacing inmputed values with 0 or 1. none -> 0, row_avg -> 1, last_day_same_hour -> 1")
+    for i_col in i_cont_columns:
+        pollution_data[i_col] = pollution_data[i_col].replace({'none': 0, 'row_avg': 1, 'last_day_same_hour': 1})
 
     return pollution_data
 
@@ -129,7 +153,7 @@ def preproc_weather(weather_folder: str, years: List[int]) -> Dataset:
 
     return weather_data
 
-def intersect_dates(pollution_data: DataFrame, weather_data: Dataset) -> Tuple[Dataset, DataFrame]:
+def intersect_dates(pollution_data: DataFrame, weather_data: Dataset) -> Tuple[DataFrame, Dataset]:
     """
     Find common dates between pollution and weather datasets and filter both to those dates.
     
@@ -155,6 +179,7 @@ def intersect_dates(pollution_data: DataFrame, weather_data: Dataset) -> Tuple[D
     print("Pollution times example:", pollution_times[:5])
     print("Weather times dtype:", weather_times.dtype)
     print("Pollution times dtype:", pollution_times.dtype)
+
     
     # Find common dates
     common_dates = sorted(set(weather_times).intersection(set(pollution_times)))
@@ -167,7 +192,7 @@ def intersect_dates(pollution_data: DataFrame, weather_data: Dataset) -> Tuple[D
     print(f"Weather data dimensions: {weather_data.dims}")
     print(f"Pollution data shape: {pollution_data.shape}")
 
-    return weather_data, pollution_data
+    return pollution_data, weather_data
 
 
 if __name__ == "__main__":
@@ -175,11 +200,12 @@ if __name__ == "__main__":
     pollution_folder = join(root_folder, "PollutionCSV")
     weather_folder = join(root_folder, "WRF_NetCDF")
     years = [2010]
+    pollutants_to_keep = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco']
 
-    pollution_data: DataFrame = preproc_pollution(pollution_folder, years)
+    pollution_data: DataFrame = preproc_pollution(pollution_folder, years, pollutants_to_keep)
     weather_data: Dataset = preproc_weather(weather_folder, years)
 
-    weather_data, pollution_data = intersect_dates(pollution_data, weather_data)
+    pollution_data, weather_data = intersect_dates(pollution_data, weather_data)
 
-    visualize_pollutant_vs_weather_var(pollution_data, weather_data, output_file=join(pollution_folder, "pollution_vs_weather.png"),
+    visualize_pollutant_vs_weather_var(pollution_data, weather_data, None, output_file=join(pollution_folder, "pollution_vs_weather.png"),
                                       pollutant_col='cont_otres_MER', weather_var='T2')
