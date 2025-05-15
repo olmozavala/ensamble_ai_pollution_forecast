@@ -1,225 +1,74 @@
 #!/usr/bin/env python
 # coding: utf-8
-# %% vamos a tratar de usar el dataset con datos imputados, y calcularlo solo con los datos autoreregresivos planeados e imputados:
+# %% Version 0.1 de modelo AR predictor
+#########################################################
+# imports, y declacraciones de variables de configuración:
 ##########################################################
-# imports, y declacraciones de variables de configuración:,
-##########################################################
-
-# %%
-# Set working directory
-import os
 import sys
-#os.chdir("/home/pedro/git2/gitflow/air_pollution_forecast")
+from os.path import join
 
+# Append custom utility path
 sys.path.append("./eoas_pyutils")
 
-# %%
-from torch.utils.data import DataLoader
+# PyTorch imports
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset  # , TensorDataset
+from torchsummary import summary
+
+# TensorBoard import
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import Dataset
-from torch.utils.data import Dataset, DataLoader
-#from pytorch_proj import (
-#    split_train_validation_and_test
-#)
-# apply_bootstrap
-#     normalizeData,
-#     plot_forecast_hours,
-# %%
-from sklearn import preprocessing
 
+# Scientific and Data Analysis Libraries
+from datetime import datetime
 
-def save_splits(file_name, train_ids, val_ids, test_ids):
-    """
-    This function saves the training, validation and test indexes. It assumes that there are
-    more training examples than validation and test examples. It also uses
-    :param file_name:
-    :param train_ids:
-    :param val_ids:
-    :param test_ids:
-    :return:
-    """
-    print("Saving split information...")
-    info_splits = DataFrame({F'Train({len(train_ids)})': train_ids})
-    info_splits[F'Validation({len(val_ids)})'] = -1
-    info_splits[F'Validation({len(val_ids)})'][0:len(val_ids)] = val_ids
-    info_splits[F'Test({len(test_ids)})'] = -1
-    info_splits[F'Test({len(test_ids)})'][0:len(test_ids)] = test_ids
-    info_splits.to_csv(file_name, index=None)
-
-def split_train_validation_and_test(num_examples, val_percentage, test_percentage, 
-                                    shuffle_ids=True, file_name = ''):
-    """
-    Splits a number into training, validation, and test randomly
-    :param num_examples: int of the number of examples
-    :param val_percentage: int of the percentage desired for validation
-    :param test_percentage: int of the percentage desired for testing
-    :return:
-    """
-    all_samples_idxs = np.arange(num_examples)
-
-    if shuffle_ids:
-        np.random.shuffle(all_samples_idxs)
-
-    test_examples = int(np.ceil(num_examples * test_percentage))
-    val_examples = int(np.ceil(num_examples * val_percentage))
-    # Train and validation indexes
-    train_idxs = all_samples_idxs[0:len(all_samples_idxs) - test_examples - val_examples]
-    val_idxs = all_samples_idxs[len(all_samples_idxs) - test_examples - val_examples:len(all_samples_idxs) - test_examples]
-    test_idxs = all_samples_idxs[len(all_samples_idxs) - test_examples:]
-    train_idxs.sort()
-    val_idxs.sort()
-    test_idxs.sort()
-
-    if file_name != '':
-        save_splits(file_name, train_idxs, val_idxs, test_idxs)
-
-
-    return [train_idxs, val_idxs, test_idxs]
-
-
-def apply_bootstrap(X_df, Y_df, contaminant, station, boostrap_threshold, forecasted_hours, boostrap_factor=1):
-    '''
-    This function will boostrap the data based on the threshold and the forecasted hours
-    '''
-
-    bootstrap_column = f"cont_{contaminant}_{station}"
-    print("Bootstrapping the data...")
-    # Searching all the index where X or Y is above the threshold
-
-    # Adding index when the current time is above the threshold
-    bootstrap_idx = X_df.loc[:,bootstrap_column] > boostrap_threshold
-
-    # Searching index when any of the forecasted hours is above the threshold
-    y_cols = Y_df.columns.values
-    for i in range(1, forecasted_hours+1):
-        # print(bootstrap_idx.sum())  
-        c_column = f"plus_{i:02d}_{bootstrap_column}"
-        if c_column in y_cols:
-            bootstrap_idx = bootstrap_idx | (Y_df.loc[:, c_column] > boostrap_threshold)
-
-    X_df = pd.concat([X_df, *[X_df[bootstrap_idx] for i in range(boostrap_factor)]])
-    Y_df = pd.concat([Y_df, *[Y_df[bootstrap_idx] for i in range(boostrap_factor)]])
-
-    return X_df, Y_df
-
-def normalizeData(data, norm_type, file_name):
-    if norm_type == "min_max":
-        scaler = preprocessing.MinMaxScaler()
-    if norm_type == "mean_zero":
-        scaler = preprocessing.StandardScaler()
-
-    scaler = scaler.fit(data)
-    data_norm_np = scaler.transform(data)
-    data_norm_df = DataFrame(data_norm_np, columns=data.columns, index=data.index)
-
-    # ******************* Saving Normalization params, scaler object **********************
-    scaler.path_file = file_name
-    with open(scaler.path_file, 'wb') as f: #scaler.path_file must be defined during training.
-        pickle.dump(scaler, f)
-    print(f'Scaler/normalizer object saved to: {scaler.path_file}')
-    print(F'Done! Current shape: {data_norm_df.shape} ')
-    return data_norm_df
-
-
-
-# %%
-#from proj_prediction.prediction import analyze_column
-#from proj_preproc.preproc import loadScaler
-
+# Import from project-specific modules
 from proj_io.inout import (
     create_folder,
     add_previous_hours,
-    get_column_names,
-    read_merged_files,
     save_columns,
 )
 
-
-# %%
+# Import constants
 from conf.localConstants import constants
-from torchsummary import summary
-import matplotlib.pyplot as plt
-from datetime import datetime
-from torch.utils.data import DataLoader, TensorDataset
-import torch.optim as optim
-import torch.nn as nn
-import torch
-import numpy as np
-import pandas as pd
-import pickle
-import sys
-from os.path import join
-import os
-from pandas import DataFrame
-# Un intento de introducir forzamientos en modelos autorregresivos
-# Se intenta forzar un modelo AR con forzamientos aplanados en modelos base
 
-
-
-# %%
-
-def filter_data(df, filter_type="none", filtered_pollutant="", filtered_station=""):
-    """
-    Filtra el DataFrame según el tipo de filtro especificado.
-    Los posibles valores de filter_type son: 'none', 'single_pollutant', 'single_pollutant_and_station'
-    """
-    all_contaminant_columns, all_meteo_columns, all_time_colums = get_column_names(df)
-
-    if filter_type == "single_pollutant":
-        filtered_pollutants = (
-            filtered_pollutant
-            if isinstance(filtered_pollutant, list)
-            else [filtered_pollutant]
-        )
-        keep_cols = [
-            x
-            for x in df.columns
-            if any(pollutant in x for pollutant in filtered_pollutants)
-        ]
-        keep_cols += all_time_colums.tolist() + all_meteo_columns.tolist()
-
-    elif filter_type == "single_pollutant_and_station":
-        keep_cols = (
-            [f"cont_{filtered_pollutant}_{filtered_station}"]
-            + all_time_colums.tolist()
-            + all_meteo_columns
-        )
-
-    elif filter_type == "none":
-        return df.copy()
-
-    print(f"Keeping columns: {len(keep_cols)} original columns: {len(df.columns)}")
-    return df[keep_cols].copy()
-
+# Import from refactoring utility
+from refactoring import (
+    apply_bootstrap,
+    split_train_validation_and_test,
+    normalizeData,
+    normalizeDataWithLoadedScaler,
+    filter_data,
+    load_imputed_data,
+    add_forecasted_hours,
+    plot_time_series_predictions,
+    save_base_predictor,
+    evaluate_and_plot_ar_predictions_new,
+)
 
 # %% Configuración Inicial
+model_name_user = "TestPSpyt"
+cur_pollutant = "otres"
+cur_station = "MER"
+now = datetime.utcnow().strftime("%Y_%m_%d_%H_%M")
+model_name = f"{model_name_user}_{cur_pollutant}_{now}"
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-hours_before = 0  # 24
-replace_nan_value = 0
+
+# grid_size = 4
+# merged_specific_folder = f"{grid_size*grid_size}"
+
 data_folder = "/ZION/AirPollutionData/Data/"
-grid_size = 4
-merged_specific_folder = f"{grid_size*grid_size}"
 input_folder = join(data_folder, "MergedDataCSV/16/BK2/")
 output_folder = join(data_folder, "TrainingTestsPS2024")
 norm_folder = join(output_folder, "norm")
 split_info_folder = join(output_folder, "Splits")
+imputed_files_folder = "/ZION/AirPollutionData/Data/MergedDataCSV/16/Imputed/bk1"
 
-val_perc = 0.1
-test_perc = 0
-epochs = 5000
-batch_size = 2048 # 32  # 4096
-bootstrap = True
-boostrap_factor = 15
-boostrap_threshold = 2.9
-model_name_user = "TestPSpyt"
-start_year = 2010
-end_year = 2012
-test_year = 2013
-cur_pollutant = "otres"
-cur_station = "MER"
-forecasted_hours = 1
-norm_type = "meanzero var 1"
+
+# Stations data
 stations_2020 = [
     "UIZ",
     "AJU",
@@ -255,57 +104,53 @@ stations_2020 = [
 stations = stations_2020
 pollutants = "cont_otres"
 
+# Preprocessing and train vars
+hours_before = 0  # 24
+replace_nan_value = 0
+forecasted_hours = 1
+norm_type = "meanzero var 1"
+val_perc = 0.1
+test_perc = 0
+bootstrap = True
+boostrap_factor = 15
+boostrap_threshold = 2.9
+start_year = 2010
+end_year = 2012
+test_year = 2013
 
-imputed_files_folder = "/ZION/AirPollutionData/Data/MergedDataCSV/16/Imputed/bk1"
+batch_size = 2048  # 32  # 4096
 
-now = datetime.utcnow().strftime("%Y_%m_%d_%H_%M")
-model_name = f"{model_name_user}_{cur_pollutant}_{now}"
-
-
-# Configuración del Data set features
+# Dataset features and additional configurations
 sequence_length = 12
 num_ar_features = 106
 num_flag_features = 106
 num_var_features = 12
 output_dim = num_ar_features
-num_hours_to_forecast = 12
+num_hours_to_forecast = 48
 num_points = 200  # The number of data points to plot
 target_column_index = 0  # The column from Y_df_train_tensor to plot
 
-learning_rate_base = 0.0005
+
+# Training parameters
+learning_rate_base = 0.001
 num_epochs_base = 5000
 patience_base = 600
 
-# Some training parameters
 learning_rate_ar = 0.0005
 num_epochs_ar = 5000
 patience_ar = 600
 
 
-
-
+# %% Beginning of the AR refactoring
 # %% Creación de carpetas necesarias
 folders = ["Splits", "Parameters", "models", "logs", "imgs", "norm"]
 for folder in folders:
     create_folder(join(output_folder, folder))
 
-##########################################################
-# %% # Load the imputed data
-# Function to load imputed data for all years and recreate the DataFrame
-# LOAD THE DATA AND PREPROCESSING
-##########################################################
-def load_imputed_data(start_year, end_year, folder_path):
-    all_data = []
-    for year in range(start_year, end_year + 1):
-        file_path = os.path.join(folder_path, f"data_imputed_{year}.csv")
-        print(f"Loading data from {file_path}")
-        yearly_data = pd.read_csv(file_path, index_col=0, parse_dates=True)
-        all_data.append(yearly_data)
-    data_imputed_df = pd.concat(all_data)
-    data_imputed_df.index = pd.to_datetime(data_imputed_df.index)
-    return data_imputed_df
 
-
+# %%
+##########################################################
+# Load the imputed data
 data_imputed_df = load_imputed_data(start_year, end_year, imputed_files_folder)
 print(data_imputed_df)
 
@@ -313,7 +158,7 @@ print(data_imputed_df.tail())
 
 data_imputed = data_imputed_df
 
-# %%
+# %% Preprocessing setup
 # Filtrar las columnas imputadas y sus flags solo para los grupos específicos
 selected_prefixes = [
     "cont_otres_",
@@ -380,32 +225,10 @@ for col in data_imputed_subset.columns:
 print(data_imputed_subset.head())
 
 
-# %%
+# %% Preprocessing steps functions
 def preprocessing_data_step0(data, gen_col_csv=True, file_name_norm=None):
     """Preprocessing data"""
     if file_name_norm:
-
-        def normalizeDataWithLoadedScaler(data, file_name):
-            """
-            Normalize data using a pre-saved scaler object.
-
-            :param data: DataFrame to be normalized
-            :param file_name: Path to the scaler .pkl file
-            :return: Normalized DataFrame
-            """
-            # Load the scaler object from the file
-            with open(file_name, "rb") as f:
-                scaler = pickle.load(f)
-
-            # Transform the data using the loaded scaler
-            data_norm_np = scaler.transform(data)
-            data_norm_df = pd.DataFrame(
-                data_norm_np, columns=data.columns, index=data.index
-            )
-
-            print(f"Scaler/normalizer object loaded from: {file_name}")
-            print(f"Done! Current shape: {data_norm_df.shape}")
-            return data_norm_df
 
         data_norm_df = normalizeDataWithLoadedScaler(data, file_name_norm)
     else:
@@ -427,26 +250,6 @@ def preprocessing_data_step0(data, gen_col_csv=True, file_name_norm=None):
 
     print("Building X...")
     X_df = add_previous_hours(X_df, hours_before=hours_before)
-
-    def add_forecasted_hours(df, forecasted_hours=range(1, 25)):
-        """
-        This function adds the forecasted hours of all columns in the dataframe
-        forecasted_hours: Array with the hours to forecast
-        """
-        new_Y_columns = {}
-
-        # Loop to create the shifted columns
-        for c_hour in forecasted_hours:
-            for c_column in df.columns:
-                new_column_name = f"plus_{c_hour:02d}_{c_column}"
-                new_Y_columns[new_column_name] = df[c_column].shift(-c_hour)
-
-        # Concatenate all new columns at once
-        Y_df = pd.concat([pd.DataFrame(new_Y_columns)], axis=1)
-
-        print(f"Shape of Y: {Y_df.shape}")
-        print("Done!")
-        return Y_df
 
     print(
         "Building Y...:Adding the forecasted hours of the pollutant as the predicted column Y..."
@@ -477,7 +280,6 @@ def preprocessing_data_step0(data, gen_col_csv=True, file_name_norm=None):
 def preprocessing_data_step1(X_df, Y_df):
     """Preprocessing data"""
     print("Splitting training and validation data by year....")
-    # splits_file = join(split_info_folder, f'splits_{model_name}.csv')
     splits_file = None
     # Here we remove the datetime indexes so we need to consider that
     train_idxs, val_idxs, _ = split_train_validation_and_test(
@@ -555,7 +357,6 @@ def preprocessing_data_step1(X_df, Y_df):
 
 
 # %% Preprocesssing, normalize, bootstrap and split data
-
 X_df, Y_df, column_x_csv, column_y_csv, file_name_norm = preprocessing_data_step0(
     data_imputed_subset
 )
@@ -563,16 +364,15 @@ X_df, Y_df, column_x_csv, column_y_csv, file_name_norm = preprocessing_data_step
 X_df = X_df[:-1]
 Y_df = Y_df[:-1]
 print(file_name_norm)
+
 # %%
 X_df_train, Y_df_train, X_df_val, Y_df_val = preprocessing_data_step1(X_df, Y_df)
-# %%
 
-print(X_df_train.head())
 # %%
+print(X_df_train.head())
 print(X_df_train.tail())
 
-# %%
-# Conversion to PyTorch tensors
+# %% Conversion to PyTorch tensors
 X_df_train_tensor = torch.tensor(X_df_train.values, dtype=torch.float32)
 Y_df_train_tensor = torch.tensor(Y_df_train.values, dtype=torch.float32)
 X_df_val_tensor = torch.tensor(X_df_val.values, dtype=torch.float32)
@@ -582,37 +382,12 @@ Y_df_val_tensor = torch.tensor(Y_df_val.values, dtype=torch.float32)
 print(type(X_df_train_tensor), X_df_train_tensor.shape)
 print(type(Y_df_train_tensor), Y_df_train_tensor.shape)
 
-# %%
 
-# Split the data into AR, flag, and var parts BEFORE creating the datasets
-
-# Assuming you have X_df_train_tensor, Y_df_train_tensor, X_df_val_tensor, Y_df_val_tensor
-# Let's split X_df_train_tensor into X_df_train_ar_tensor, X_df_train_flag_tensor and X_df_train_var_tensor
-X_df_train_ar_tensor = X_df_train_tensor[:, :num_ar_features]
-X_df_train_flag_tensor = X_df_train_tensor[
-    :, num_ar_features : num_ar_features + num_flag_features
-]
-X_df_train_var_tensor = X_df_train_tensor[:, -num_var_features:]
-
-X_df_val_ar_tensor = X_df_val_tensor[:, :num_ar_features]
-X_df_val_flag_tensor = X_df_val_tensor[
-    :, num_ar_features : num_ar_features + num_flag_features
-]
-X_df_val_var_tensor = X_df_val_tensor[:, -num_var_features:]
-
-
-# %%
-Y_df_train_tensor = Y_df_train_tensor[:, :num_ar_features]
-len(Y_df_train_tensor[0])
-Y_df_val_tensor = Y_df_val_tensor[:, :num_ar_features]
-len(Y_df_val_tensor[0])
-
-# %%
 ##########################################################
 # %% # Define the base predictor model CLASS, AND AUTOREGRESSIVE PREDICTOR
 ##########################################################
 class BasePredictor(nn.Module):
-    #  modelo más deep propuesto por 
+    #  modelo más deep propuesto por
     # T4
     def __init__(
         self,
@@ -769,7 +544,6 @@ class AutoregressivePredictor(nn.Module):
 
         return torch.stack(predictions, dim=1)
 
-
     def update_inputs(self, preds, X_data, F_data, V_data, current_idx, batch_size):
         """
         Updates the input sequences for the next autoregressive step (simplified).
@@ -856,7 +630,7 @@ class AutoregressivePredictor(nn.Module):
 
 
 ##########################################################
-# Define the dataset and dataloader classes FOR THE BASE MODEL TRAINING
+# %% Define the dataset and dataloader classes
 ##########################################################
 class TimeSeriesDataset(Dataset):
     def __init__(
@@ -893,6 +667,7 @@ class TimeSeriesDataset(Dataset):
         V_sequence_flat = V_sequence.reshape(-1)
 
         return X_sequence_flat, F_sequence_flat, V_sequence_flat, Y_target
+
 
 ##########################################################
 # Define the dataset and dataloader classes FOR THE AR MODEL TRAINING
@@ -976,17 +751,32 @@ class AutoregressiveTimeSeriesDataset(Dataset):
 
         return X_ar_sequence_flat, X_flag_sequence_flat, X_var_sequence_flat, Y_targets
 
-# %% 
-# BASE PREDICTOR INSTANTIATION
+
+##########################################################
+# %% BASE PREDICTOR INSTANTIATION
+##########################################################
 base_predictor = BasePredictor(
     num_ar_features, num_flag_features, num_var_features, output_dim, sequence_length
 ).to(device)
 
-# SOME TRAINING PARAMETERS AND PROCESSINGS DECLARATIONS
+# Print the model summary
+print("Base predictor model summary:")
+summary(
+    base_predictor,
+    [
+        (num_ar_features * sequence_length,),
+        (num_flag_features * sequence_length,),
+        (num_var_features * sequence_length,),
+    ],
+)
 
+
+
+
+# %% SOME TRAINING PARAMETERS AND PROCESSINGS DECLARATIONS
 # Verify and APPLYING DataParallel if multiple GPUs are available <- IMPORTANT
 if torch.cuda.device_count() > 1:
-    print(f'Using {torch.cuda.device_count()} GPUs!')
+    print(f"Using {torch.cuda.device_count()} GPUs!")
     base_predictor = nn.DataParallel(base_predictor)
 
 # Create the dataset and dataloader
@@ -1033,142 +823,115 @@ val_dataset = TimeSeriesDataset(
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 
-# DEFINING *PLOTS* FOR THE BASE MODEL EVALUATION AND DEBUGGING
-
-def plot_time_series_predictions(
-    base_predictor,
-    X_df_train_ar_tensor,
-    X_df_train_flag_tensor,
-    X_df_train_var_tensor,
-    Y_df_train_tensor,
-    sequence_length,
-    device,
-    num_points=200,
-    target_column_index=0,
-):
-    """
-    Plots a time series of predictions vs. actual values for a specific column over a sequence of data points.
-
-    Args:
-        base_predictor: The trained BasePredictor model.
-        X_df_train_ar_tensor: The input tensor for AR features.
-        X_df_train_flag_tensor: The input tensor for Flag features.
-        X_df_train_var_tensor: The input tensor for Var features.
-        Y_df_train_tensor: The target data tensor.
-        sequence_length: The length of the input sequences.
-        device: The device to use ('cuda' or 'cpu').
-        num_points: The number of data points to include in the time series plot.
-        target_column_index: The index of the column in Y_df_train_tensor to plot.
-    """
-    base_predictor.eval()  # Set the model to evaluation mode
-
-    predictions = []
-    actual_values = []
-
-    # Total possible points considering the sequence length
-    total_possible_points = len(X_df_train_ar_tensor) - sequence_length
-    if num_points > total_possible_points:
-        print(
-            f"Requested num_points ({num_points}) larger than available data points ({total_possible_points}). Adjusting to {total_possible_points}."
-        )
-        num_points = total_possible_points
-
-    with torch.no_grad():
-        for i in range(num_points):
-            start_idx = i  # Index to slice the sequence from the tensors
-
-            input_ar = (
-                X_df_train_ar_tensor[start_idx : start_idx + sequence_length]
-                .reshape(-1)
-                .unsqueeze(0)
-                .to(device)
-            )
-            input_flag = (
-                X_df_train_flag_tensor[start_idx : start_idx + sequence_length]
-                .reshape(-1)
-                .unsqueeze(0)
-                .to(device)
-            )
-            input_var = (
-                X_df_train_var_tensor[start_idx : start_idx + sequence_length]
-                .reshape(-1)
-                .unsqueeze(0)
-                .to(device)
-            )
-
-            # Make the prediction
-            prediction = base_predictor(input_ar, input_flag, input_var)
-
-            # Actual value for the target column
-            actual_value = Y_df_train_tensor[
-                start_idx + sequence_length, target_column_index
-            ]
-
-            # Extract the prediction for the target column
-            prediction_for_column = prediction[0, target_column_index]
-
-            predictions.append(prediction_for_column.cpu().numpy())
-            actual_values.append(actual_value.cpu().numpy())
-
-    # Plotting
-    plt.figure(figsize=(16, 6))
-    plt.plot(actual_values, label="Actual Values", marker="o", linestyle="-")
-    plt.plot(predictions, label="Predictions", marker="x", linestyle="-")
-
-    plt.title(
-        f"Time Series Predictions vs Actual Values (Column: {target_column_index}, {num_points} points)"
-    )
-    plt.xlabel("Time Step")
-    plt.ylabel("Value")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
 # %% Base model
 ##########################################################
 # Base model weights Loading , and AR model instantiation
 ##########################################################
-def load_base_predictor(
-    base_predictor_class, model_name, device, save_dir="./saved_models"
+
+def load_base_predictor_flexible(
+    base_predictor_class, model_path, device, num_ar_features, num_flag_features, 
+    num_var_features, output_dim, sequence_length
 ):
     """
-    Loads the trained base predictor model.
-
+    Carga un modelo base previamente entrenado con manejo flexible de state_dict.
+    
     Args:
-        base_predictor_class (nn.Module): The class of the model to initialize.
-        model_name (str): Name of the model (used for filename).
-        device (str): The device to load the model onto ('cuda' or 'cpu').
-        save_dir (str, optional): Directory where the model is saved. Defaults to "./saved_models".
-
+        base_predictor_class (nn.Module): Clase del modelo a instanciar.
+        model_path (str): Ruta del modelo guardado sin extensión.
+        device (str): Dispositivo donde se cargará el modelo ('cuda' o 'cpu').
+        num_ar_features (int): Número de características AR.
+        num_flag_features (int): Número de características de banderas.
+        num_var_features (int): Número de características variadas.
+        output_dim (int): Dimensión de salida.
+        sequence_length (int): Longitud de la secuencia.
+        
     Returns:
-        nn.Module: The loaded model.
+        nn.Module: Modelo cargado y listo para evaluación.
     """
-    save_path = f"{save_dir}/{model_name}_base_model.pth"
-    # model = base_predictor_class().to(device)  # Inicializar la arquitectura
+    # Primero cargamos el state_dict para examinar su estructura
+    full_path = f'{model_path}_base_model.pth'
+    state_dict = torch.load(full_path, map_location=device)
+    
+    # Imprimir las claves del state_dict para depuración
+    print("Claves del state_dict guardado:")
+    for key in state_dict.keys():
+        print(f"  - {key}")
+    
+    # Instanciar el modelo con los parámetros adecuados
     base_predictor = base_predictor_class(
-    num_ar_features, num_flag_features, num_var_features, output_dim, sequence_length
-).to(device)
+        num_ar_features, num_flag_features, num_var_features, output_dim, sequence_length
+    )
+    
+    # Imprimir las claves esperadas por el modelo actual
+    print("\nClaves esperadas por el modelo:")
+    expected_keys = base_predictor.state_dict().keys()
+    for key in expected_keys:
+        print(f"  - {key}")
+    
+    # Verificar si necesitamos añadir o quitar prefijo 'module.'
+    state_dict_has_module = any(k.startswith('module.') for k in state_dict.keys())
+    model_has_module = any(k.startswith('module.') for k in expected_keys)
+    
+    # Crear un nuevo state_dict ajustado según sea necesario
+    from collections import OrderedDict
+    adjusted_state_dict = OrderedDict()
+    
+    # Caso 1: State dict tiene 'module.' pero el modelo no lo espera
+    if state_dict_has_module and not model_has_module:
+        print("\nAjustando: Eliminando prefijo 'module.' del state_dict")
+        for k, v in state_dict.items():
+            adjusted_state_dict[k.replace('module.', '')] = v
+    
+    # Caso 2: El modelo espera 'module.' pero el state dict no lo tiene
+    elif not state_dict_has_module and model_has_module:
+        print("\nAjustando: Añadiendo prefijo 'module.' al state_dict")
+        for k, v in state_dict.items():
+            adjusted_state_dict[f'module.{k}'] = v
+    
+    # Caso 3: No se necesita ajuste
+    else:
+        adjusted_state_dict = state_dict
+    
+    # Cargar el estado en modo flexible (strict=False)
+    # Esto permitirá cargar parcialmente el modelo si hay diferencias en la estructura
+    missing_keys, unexpected_keys = base_predictor.load_state_dict(adjusted_state_dict, strict=False)
+    
+    print("\nResultado de la carga:")
+    if missing_keys:
+        print(f"Claves faltantes: {missing_keys}")
+    if unexpected_keys:
+        print(f"Claves inesperadas: {unexpected_keys}")
+        
+    # Mover el modelo al dispositivo adecuado
+    base_predictor = base_predictor.to(device)
+    
+    # Si hay múltiples GPUs, usar DataParallel ahora
+    if torch.cuda.device_count() > 1:
+        print(f"\nUsando {torch.cuda.device_count()} GPUs!")
+        base_predictor = torch.nn.DataParallel(base_predictor)
+    
+    # Establecer en modo evaluación
+    base_predictor.eval()
+    
+    print(f"\n✅ Modelo cargado desde: {full_path}")
+    return base_predictor
 
-    model.load_state_dict(torch.load(save_path, map_location=device))
-    model.eval()  # Modo evaluación
-    print(f"✅ Modelo cargado desde: {save_path}")
-    return model
+# Definir ruta y cargar el modelo con enfoque flexible
+model_path_prefix = "/OZONO/HOME/pedro/git2/gitflow/air_pollution_forecast/saved_models/TestPSpyt_otres_2025_03_26_17_49_ar_5"
 
-model_path_base = "/OZONO/HOME/pedro/git2/gitflow/air_pollution_forecast/saved_models/TestPSpyt_otres_2025_03_26_17_49_ar_5_base_model.pth"
+# Cargar el modelo base con manejo flexible de state_dict
+base_predictor = load_base_predictor_flexible(
+    BasePredictor, 
+    model_path_prefix, 
+    device,
+    num_ar_features, 
+    num_flag_features, 
+    num_var_features, 
+    output_dim, 
+    sequence_length
+)
 
-base_predictor = BasePredictor(
-    num_ar_features, num_flag_features, num_var_features, output_dim, sequence_length
-).to(device)
-
-# Wrap the model with nn.DataParallel if multiple GPUs are available
-if torch.cuda.device_count() > 1:
-    print(f"Using {torch.cuda.device_count()} GPUs!")
-    base_predictor = nn.DataParallel(base_predictor)
-
-base_predictor.load_state_dict(torch.load(model_path_base, map_location=device))
-base_predictor.eval()  # Modo evaluación
-print(f"✅ Modelo cargado desde: {model_path_base}")
-
+# %%
 # PLOT TEST OF BASE MODEL PREDICTIONS
 plot_time_series_predictions(
     base_predictor,
@@ -1183,72 +946,6 @@ plot_time_series_predictions(
 )
 
 
-# ##########################################################
-# FUNCTION DECLARATIONS FOR MORE TRAINING STEPS ON BASE MODEL   1hr
-##########################################################
-
-def train_base_predictor(
-    base_predictor, train_loader, device, model_name, num_epochs_base=100, learning_rate=0.01
-):
-    """
-    Trains the base predictor model.
-
-    Args:
-        base_predictor (nn.Module): The base predictor model.
-        train_loader (DataLoader): The DataLoader for the training data.
-        device (str): The device to use ('cuda' or 'cpu').
-        model_name (str): The name of the model for TensorBoard logging.
-        num_epochs (int, optional): The number of training epochs. Defaults to 100.
-        learning_rate (float, optional): The learning rate for the optimizer. Defaults to 0.01.
-
-    Returns:
-        nn.Module: The trained base predictor model.
-    """
-
-    # Define the optimizer and loss function
-    optimizer = optim.Adam(base_predictor.parameters(), lr=learning_rate)
-    criterion = nn.MSELoss()
-
-    # Initialize TensorBoard writer
-    log_dir = f"./tensorboard_logs/{model_name}_base_model"
-    writer = SummaryWriter(log_dir=log_dir)
-
-    # Training loop
-    for epoch in range(num_epochs_base):
-        epoch_loss = 0.0
-        for x_batch, f_batch, v_batch, y_batch in train_loader:
-            x_batch, f_batch, v_batch, y_batch = (
-                x_batch.to(device),
-                f_batch.to(device),
-                v_batch.to(device),
-                y_batch.to(device),
-            )
-
-            # Reshape the input tensors to match the expected input shape of the model
-            x_batch = x_batch.reshape(x_batch.size(0), -1)
-            f_batch = f_batch.reshape(f_batch.size(0), -1)
-            v_batch = v_batch.reshape(v_batch.size(0), -1)
-
-            optimizer.zero_grad()
-            outputs = base_predictor(x_batch, f_batch, v_batch)
-            loss = criterion(outputs, y_batch)
-            loss.backward()
-            optimizer.step()
-
-            epoch_loss += loss.item()
-
-        # Log the average loss for the epoch
-        avg_loss = epoch_loss / len(train_loader)
-        writer.add_scalar("Loss/train", avg_loss, epoch)
-
-        print(f"Epoch: {epoch+1}/{num_epochs_base}, Loss: {avg_loss:.4f}")
-
-    # Close the TensorBoard writer
-    writer.close()
-
-    return base_predictor
-
-# %%
 # %% 
 ##########################################################    
 #Instantiate the AutoregressivePredictor:
@@ -1313,16 +1010,6 @@ print("Shape of predictions:", predictions.shape)
 print("First prediction:", predictions[0, 0, :])
 
 
-
-
-# %%%
-# # DEBUGGING INFO
-# Después de inicializar ar_predictor
-# print(f"Dimensiones esperadas para AR: {ar_predictor.expected_ar_dim}")
-# print(f"Dimensiones esperadas para flag: {ar_predictor.expected_flag_dim}")
-# print(f"Dimensiones esperadas para var: {ar_predictor.expected_var_dim}")
-
-# print_dimensions(train_ar_loader)
 # %%
 # TRAINING THE AUTOREGRESSIVE MODEL 
 # Assuming you have X_df_train_ar_tensor, X_df_train_flag_tensor, X_df_train_var_tensor, Y_df_train_tensor
@@ -1343,120 +1030,20 @@ train_ar_loader = DataLoader(train_ar_dataset, batch_size=batch_size, shuffle=Fa
 
 
 # %%
-# FUN DEFINITION FOR PLOT TEST OF AR MODEL PREDICTIONS
-def evaluate_and_plot_ar_predictions_new(
-    ar_predictor,
-    X_ar_data,
-    X_flag_data,
-    X_var_data,
-    Y_data,
-    sequence_start_idx,
-    num_hours_to_forecast,
+val_ar_dataset = AutoregressiveTimeSeriesDataset(
+    X_df_val_ar_tensor,
+    X_df_val_flag_tensor,
+    X_df_val_var_tensor,
+    Y_df_val_tensor,
     sequence_length,
-    device,
-    columns_to_plot,
+    num_hours_to_forecast,
     num_ar_features,
     num_flag_features,
     num_var_features,
-):
-    """
-    Evaluates the autoregressive model and plots the predictions versus the actual values for specific columns.
-    This version is adapted to use the new AutoregressivePredictor and separate input datasets (X_ar_data, X_flag_data, X_var_data).
+)
 
-    Args:
-        ar_predictor: The trained AutoregressivePredictor model.
-        X_ar_data: The input AR data tensor.
-        X_flag_data: The input flag data tensor.
-        X_var_data: The input var data tensor.
-        Y_data: The target data tensor.
-        sequence_start_idx: The starting index of the sequence to evaluate.
-        num_hours_to_forecast: The number of hours to forecast.
-        sequence_length: The length of the input sequence.
-        device: The device to use ('cuda' or 'cpu').
-        columns_to_plot: A list of column indices to plot.
-        num_ar_features: Number of AR features.
-        num_flag_features: Number of flag features.
-        num_var_features: Number of var features.
-    """
-
-    # Check if the sequence fits in the dataset:
-    if sequence_start_idx + sequence_length + num_hours_to_forecast > len(X_ar_data):
-        print(
-            f"Error: sequence_start_idx {sequence_start_idx} + sequence_length {sequence_length} + num_hours_to_forecast {num_hours_to_forecast} exceeds dataset length {len(X_ar_data)}"
-        )
-        return
-
-    # Create the initial input sequences
-    initial_input_ar = X_ar_data[
-        sequence_start_idx : sequence_start_idx + sequence_length, :
-    ]
-    initial_input_flag = X_flag_data[
-        sequence_start_idx : sequence_start_idx + sequence_length, :
-    ]
-    initial_input_var = X_var_data[
-        sequence_start_idx : sequence_start_idx + sequence_length, :
-    ]
-
-    # Flatten the initial input sequences and add a batch dimension
-    initial_input_ar_flat = initial_input_ar.reshape(1, -1).to(
-        device
-    )  # (1, sequence_length * num_ar_features)
-    initial_input_flag_flat = initial_input_flag.reshape(1, -1).to(
-        device
-    )  # (1, sequence_length * num_flag_features)
-    initial_input_var_flat = initial_input_var.reshape(1, -1).to(
-        device
-    )  # (1, sequence_length * num_var_features)
-
-    # Get the actual targets for the future hours
-    actual_targets = Y_data[
-        sequence_start_idx
-        + sequence_length : sequence_start_idx
-        + sequence_length
-        + num_hours_to_forecast,
-        :,
-    ]
-
-    # Evaluate the model
-    ar_predictor.eval()
-    with torch.no_grad():
-        predictions = ar_predictor(
-            initial_input_ar_flat,
-            initial_input_flag_flat,
-            initial_input_var_flat,
-            X_ar_data,
-            X_flag_data,
-            X_var_data,
-            sequence_start_idx,
-        )
-
-    # Reshape for easier plotting
-    pred_np = predictions.cpu().numpy().squeeze()
-    actual_np = actual_targets.cpu().numpy()
-
-    # Plot only the specified columns
-    plt.figure(figsize=(12, 6))
-    for col_idx in columns_to_plot:
-        if col_idx >= actual_np.shape[1]:
-            print(
-                f"Warning: column index {col_idx} is out of bounds for the actual data (shape: {actual_np.shape}). Skipping."
-            )
-            continue
-        plt.plot(pred_np[:, col_idx], label=f"Pred Columna {col_idx}", marker="o")
-        plt.plot(
-            actual_np[:, col_idx],
-            label=f"True Columna {col_idx}",
-            linestyle="dashed",
-            marker="x",
-        )
-
-    plt.title(f"AR Predictions vs True Values (Starting from idx {sequence_start_idx})")
-    plt.xlabel("Hours Ahead")
-    plt.ylabel("Value")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
+batch_size = 64  # Or your desired batch size
+val_ar_loader = DataLoader(val_ar_dataset, batch_size=batch_size, shuffle=False)
 
 # %% Example Usage:
 
@@ -1496,179 +1083,247 @@ evaluate_and_plot_ar_predictions_new(
     num_flag_features,
     num_var_features,
 )
-# %%
-# Example Usage (assuming you have defined base_predictor, train_dataset, device, and model_name):
-# train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-
-
-# VOY A ESTAR CORRIENDO ESTA SECCIÓN, HASTA QUE CONSIDERE QUE EL MODELO MÁS MENOS PREDICE, OK:
-# base_predictor = train_base_predictor(base_predictor, train_loader, device, model_name, num_epochs_base=num_epochs_base, learning_rate=learning_rate_base)
-
-# plot_time_series_predictions(
-#     base_predictor,
-#     X_df_train_ar_tensor,
-#     X_df_train_flag_tensor,
-#     X_df_train_var_tensor,
-#     Y_df_train_tensor,
-#     sequence_length,
-#     device,
-#     num_points,
-#     target_column_index,
-# )
-
 
 # %%
 ##########################################################
 # FIRST TRAINING LOOP FOR THE AR MODEL
 ##########################################################
+import time  # Import the time module to measure elapsed time
+def train_ar_predictor(
+    ar_predictor,
+    train_loader,
+    device,
+    model_name,
+    criterion,
+    optimizer,
+    X_df_train_ar_tensor,
+    X_df_train_flag_tensor,
+    X_df_train_var_tensor,
+    num_epochs_ar=100,
+    learning_rate=0.01,
+    val_loader=None,
+    X_df_val_ar_tensor=None,
+    X_df_val_flag_tensor=None,
+    X_df_val_var_tensor=None,
+):
+    """
+    Trains the autoregressive predictor model.
 
-##########################################################    
-# AR MODEL TRAINING LOOP STEP
-##########################################################    
-# Assuming you have already defined:
-# - AutoregressivePredictor class (ar_predictor)
-# - AutoregressiveTimeSeriesDataset class (train_ar_dataset, val_ar_dataset)
-# - X_df_train_ar_tensor, X_df_train_flag_tensor, X_df_train_var_tensor, Y_df_train_tensor
-# - X_df_val_ar_tensor, X_df_val_flag_tensor, X_df_val_var_tensor, Y_df_val_tensor
-# - num_ar_features, num_flag_features, num_var_features, output_dim, sequence_length, device
-# - batch_size
-# - model_name (for TensorBoard logging)
-# - num_hours_to_forecast
+    Args:
+        ar_predictor (nn.Module): The autoregressive predictor model.
+        train_loader (DataLoader): The DataLoader for the training data.
+        device (str): The device to use ('cuda' or 'cpu').
+        model_name (str): The name of the model for TensorBoard logging.
+        criterion (nn.Module): The loss function.
+        optimizer (torch.optim.Optimizer): The optimizer.
+        X_df_train_ar_tensor (torch.Tensor): The AR features tensor for training.
+        X_df_train_flag_tensor (torch.Tensor): The flag features tensor for training.
+        X_df_train_var_tensor (torch.Tensor): The var features tensor for training.
+        num_epochs_ar (int, optional): The number of training epochs. Defaults to 100.
+        learning_rate (float, optional): The learning rate for the optimizer. Defaults to 0.01.
+        val_loader (DataLoader, optional): The DataLoader for validation data. Defaults to None.
+        X_df_val_ar_tensor (torch.Tensor, optional): The AR features tensor for validation. Defaults to None.
+        X_df_val_flag_tensor (torch.Tensor, optional): The flag features tensor for validation. Defaults to None.
+        X_df_val_var_tensor (torch.Tensor, optional): The var features tensor for validation. Defaults to None.
+
+    Returns:
+        nn.Module: The trained autoregressive predictor model.
+    """
+    # Initialize TensorBoard writer
+    log_dir = f"./tensorboard_logs/{model_name}_ar_model"
+    writer = SummaryWriter(log_dir=log_dir)
+
+    # Training loop
+    ar_predictor.train()
+    
+    for epoch in range(num_epochs_ar):
+        epoch_loss = 0.0
+        start_epoch_time = time.time()  # Start timer for the epoch
+
+        for (
+            x_ar_batch_flat,
+            x_flag_batch_flat,
+            x_var_batch_flat,
+            y_batch,
+        ) in train_loader:
+            start_batch_time = time.time()  # Start timer for the batch
+
+            x_ar_batch_flat, x_flag_batch_flat, x_var_batch_flat, y_batch = (
+                x_ar_batch_flat.to(device),
+                x_flag_batch_flat.to(device),
+                x_var_batch_flat.to(device),
+                y_batch.to(device),
+            )
+
+            # Prepare the initial input for the AutoregressivePredictor
+            initial_input_ar = x_ar_batch_flat
+            initial_input_flag = x_flag_batch_flat
+            initial_input_var = x_var_batch_flat
+
+            # Zero the gradients
+            optimizer.zero_grad()
+            
+            # Make predictions
+            predictions = ar_predictor(
+                initial_input_ar,
+                initial_input_flag,
+                initial_input_var,
+                X_df_train_ar_tensor,
+                X_df_train_flag_tensor,
+                X_df_train_var_tensor,
+                0,  # sequence_start_idx = 0 for training
+            )
+
+            # Calculate the loss
+            loss = criterion(predictions, y_batch)
+
+            # Backpropagation and optimization
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item()
+
+            end_batch_time = time.time()  # End timer for the batch
+            batch_time = end_batch_time - start_batch_time
+            # print(f"Batch time: {batch_time:.2f}s")  # Print batch time
+
+        end_epoch_time = time.time()  # End timer for the epoch
+        epoch_time = end_epoch_time - start_epoch_time  # Calculate epoch time
+
+        # Log training loss to TensorBoard
+        avg_train_loss = epoch_loss / len(train_loader)
+        writer.add_scalar("Loss/train", avg_train_loss, epoch)
+
+        # Validation (if validation data is provided)
+        val_loss = 0.0
+        if val_loader is not None and all(x is not None for x in [X_df_val_ar_tensor, X_df_val_flag_tensor, X_df_val_var_tensor]):
+            ar_predictor.eval()
+            with torch.no_grad():
+                for (
+                    x_ar_val_batch_flat,
+                    x_flag_val_batch_flat,
+                    x_var_val_batch_flat,
+                    y_val_batch,
+                ) in val_loader:
+                    x_ar_val_batch_flat, x_flag_val_batch_flat, x_var_val_batch_flat, y_val_batch = (
+                        x_ar_val_batch_flat.to(device),
+                        x_flag_val_batch_flat.to(device),
+                        x_var_val_batch_flat.to(device),
+                        y_val_batch.to(device),
+                    )
+
+                    # Prepare the initial input for validation
+                    initial_input_ar_val = x_ar_val_batch_flat
+                    initial_input_flag_val = x_flag_val_batch_flat
+                    initial_input_var_val = x_var_val_batch_flat
+
+                    # Make validation predictions
+                    val_predictions = ar_predictor(
+                        initial_input_ar_val,
+                        initial_input_flag_val,
+                        initial_input_var_val,
+                        X_df_val_ar_tensor,
+                        X_df_val_flag_tensor,
+                        X_df_val_var_tensor,
+                        0,  # sequence_start_idx = 0 for validation
+                    )
+                    
+                    val_loss += criterion(val_predictions, y_val_batch).item()
+
+            # Calculate and log average validation loss
+            avg_val_loss = val_loss / len(val_loader)
+            writer.add_scalar('Loss/val', avg_val_loss, epoch)
+            
+            # Set model back to training mode
+            ar_predictor.train()
+
+        # Print progress
+        if (epoch + 1) % 1 == 0:
+            if val_loader is not None:
+                print(f"Epoch [{epoch + 1}/{num_epochs_ar}], Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}, Epoch Time: {epoch_time:.2f}s")
+            else:
+                print(f"Epoch [{epoch + 1}/{num_epochs_ar}], Train Loss: {avg_train_loss:.4f}, Epoch Time: {epoch_time:.2f}s")
+
+    # Close the TensorBoard writer
+    writer.close()
+
+    print("AR model training finished.")
+    return ar_predictor
+    writer.close()
+
+    print("AR model training finished.")
+    return ar_predictor
+
 
 # Hyperparameters
 criterion = nn.MSELoss()
+optimizer = optim.Adam(ar_predictor.parameters(), lr=learning_rate_ar)
 
-# Create the DataLoaders (assuming they are already defined)
-# train_ar_loader = DataLoader(train_ar_dataset, batch_size=batch_size, shuffle=True)
-# val_ar_loader = DataLoader(val_ar_dataset, batch_size=batch_size, shuffle=False)
+# Train the AR model
+ar_predictor = train_ar_predictor(
+    ar_predictor,
+    train_ar_loader,
+    device,
+    model_name,
+    criterion,
+    optimizer,
+    X_df_train_ar_tensor,
+    X_df_train_flag_tensor,
+    X_df_train_var_tensor,
+    num_epochs_ar=num_epochs_ar,
+    learning_rate=learning_rate_ar,
+    val_loader=val_ar_loader,  # Optional: set to None if not using validation
+    X_df_val_ar_tensor=X_df_val_ar_tensor,  # Optional
+    X_df_val_flag_tensor=X_df_val_flag_tensor,  # Optional
+    X_df_val_var_tensor=X_df_val_var_tensor,  # Optional
+)
 
-# Initialize TensorBoard writer
-log_dir = f"./tensorboard_logs/{model_name}_ar_model"
-writer = SummaryWriter(log_dir=log_dir)
+# %%
 
-plot_time_series_predictions(
-    base_predictor,
+columns_to_plot = [0, 2, 5, 104, 105]  # Example columns to plot
+sequence_start_idx = 0  # Example starting index
+
+# Evaluate and plot on the training data
+evaluate_and_plot_ar_predictions_new(
+    ar_predictor,
     X_df_train_ar_tensor,
     X_df_train_flag_tensor,
     X_df_train_var_tensor,
     Y_df_train_tensor,
+    sequence_start_idx,
+    num_hours_to_forecast,
     sequence_length,
     device,
-    num_points,
-    target_column_index,
+    columns_to_plot,
+    num_ar_features,
+    num_flag_features,
+    num_var_features,
 )
-# Training loop
-optimizer = optim.Adam(ar_predictor.parameters(), lr=learning_rate_ar)
-ar_predictor.train()
 
-for epoch in range(num_epochs_ar):
-    epoch_loss = 0
-    for (
-        x_ar_batch_flat,
-        x_flag_batch_flat,
-        x_var_batch_flat,
-        y_batch,
-    ) in train_ar_loader:
-        x_ar_batch_flat, x_flag_batch_flat, x_var_batch_flat, y_batch = (
-            x_ar_batch_flat.to(device),
-            x_flag_batch_flat.to(device),
-            x_var_batch_flat.to(device),
-            y_batch.to(device),
-        )
-
-        # Prepare the initial input for the AutoregressivePredictor
-        # No need to reshape here, as the data is already flattened in the dataset
-        initial_input_ar = x_ar_batch_flat
-        initial_input_flag = x_flag_batch_flat
-        initial_input_var = x_var_batch_flat
-
-        # Make predictions
-        predictions = ar_predictor(
-            initial_input_ar,
-            initial_input_flag,
-            initial_input_var,
-            X_df_train_ar_tensor,
-            X_df_train_flag_tensor,
-            X_df_train_var_tensor,
-            0,  # sequence_start_idx = 0 for training
-        )
-
-        # Calculate the loss
-        loss = criterion(predictions, y_batch)
-
-        # Backpropagation and optimization
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        epoch_loss += loss.item()
-
-    # Log training loss to TensorBoard
-    writer.add_scalar("Loss/train", epoch_loss / len(train_ar_loader), epoch)
-
-    # Validation (optional, but recommended)
-    ar_predictor.eval()
-    val_loss = 0.0
-    # with torch.no_grad():
-    #     for x_ar_val_batch_flat, x_flag_val_batch_flat, x_var_val_batch_flat, y_val_batch in val_ar_loader:
-    #         x_ar_val_batch_flat, x_flag_val_batch_flat, x_var_val_batch_flat, y_val_batch = x_ar_val_batch_flat.to(device), x_flag_val_batch_flat.to(device), x_var_val_batch_flat.to(device), y_val_batch.to(device)
-
-    #         # Prepare the initial input for the AutoregressivePredictor
-    #         initial_input_ar_val = x_ar_val_batch_flat
-    #         initial_input_flag_val = x_flag_val_batch_flat
-    #         initial_input_var_val = x_var_val_batch_flat
-
-    #         val_predictions = ar_predictor(
-    #             initial_input_ar_val,
-    #             initial_input_flag_val,
-    #             initial_input_var_val,
-    #             X_df_val_ar_tensor,
-    #             X_df_val_flag_tensor,
-    #             X_df_val_var_tensor,
-    #             0  # sequence_start_idx = 0 for validation
-    #         )
-    #         val_loss += criterion(val_predictions, y_val_batch).item()
-
-    # val_loss /= len(val_ar_loader)
-
-    # # Log validation loss to TensorBoard
-    # writer.add_scalar('Loss/val', val_loss, epoch)
-
-    if (epoch + 1) % 10 == 0:
-        # , Val Loss: {val_loss:.4f}')
-        print(
-            f"Epoch [{epoch + 1}/{num_epochs_ar}], Loss: {epoch_loss/len(train_ar_loader):.4f}"
-        )
-
-# Close the TensorBoard writer
-writer.close()
-
-print("Training finished.")
+# Evaluate and plot on the validation data
+evaluate_and_plot_ar_predictions_new(
+    ar_predictor,
+    X_df_val_ar_tensor,
+    X_df_val_flag_tensor,
+    X_df_val_var_tensor,
+    Y_df_val_tensor,
+    sequence_start_idx,
+    num_hours_to_forecast,
+    sequence_length,
+    device,
+    columns_to_plot,
+    num_ar_features,
+    num_flag_features,
+    num_var_features,
+)
 
 # %%
 ##########################################################
 # SAVING OF WEIGHTS FOR THE BASE(AR) MODEL
 ##########################################################
+save_base_predictor(base_predictor, f'{model_name}_ar_t9')
 
-def save_base_predictor(base_predictor, model_name, save_dir="./saved_models"):
-    """
-    Saves the trained base predictor model.
-
-    Args:
-        base_predictor (nn.Module): The trained model to save.
-        model_name (str): Name of the model (used for filename).
-        save_dir (str, optional): Directory to save the model. Defaults to "./saved_models".
-    """
-    import os
-
-    os.makedirs(save_dir, exist_ok=True)
-
-    save_path = f"{save_dir}/{model_name}_base_model.pth"
-    torch.save(base_predictor.state_dict(), save_path)
-    print(f"✅ Modelo guardado en: {save_path}")
-
-
-
-save_base_predictor(base_predictor, f'{model_name}_ar_8')
+save_base_predictor(ar_predictor, f'{model_name}_ar_t9', ar=True)
 
 # %%
+
