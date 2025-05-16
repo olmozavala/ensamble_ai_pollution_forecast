@@ -104,3 +104,10 @@ def dice_coef_lesion(y_true, y_pred, smooth=1.0):
     y_true_c = tf.floor(temp + eps)
     intersection = K.sum(y_true_c * y_pred_c)
     return (2. * intersection + smooth) / ( K.sum(y_true_c) + K.sum(y_pred_c) + smooth)
+
+
+def masked_mse_loss(y_true, y_pred):
+    """Masked MSE loss for regression tasks."""
+    pollution_data = y_true[0]
+    mask_data = y_true[1]
+    return F.mse_loss(y_pred*mask_data, pollution_data*mask_data)

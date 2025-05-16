@@ -41,19 +41,26 @@ class Trainer(BaseTrainer):
         """
         self.model.train()
         self.train_metrics.reset()
+        auto_regresive_steps = self.config['trainer']['auto_regresive_steps']
+        auto_regresive_idx = 0
         for batch_idx, (data, target) in enumerate(self.data_loader):
-            data, target = data.to(self.device), target.to(self.device)
+            x_pollution_data, x_weather_data = data
+            x_pollution_data, x_weather_data = x_pollution_data.to(self.device), x_weather_data.to(self.device)
+
+            y_pollution_data = target[0][:, auto_regresive_idx, :].to(self.device)
+            y_mask_data = target[1][:, auto_regresive_idx, :].to(self.device) 
+            new_target = (y_pollution_data, y_mask_data)
 
             self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = self.criterion(output, target)
+            output = self.model(x_weather_data, x_pollution_data)
+            loss = self.criterion(output, new_target)
             loss.backward()
             self.optimizer.step()
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
             for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, target))
+                self.train_metrics.update(met.__name__, met(output, new_target))
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
@@ -61,9 +68,6 @@ class Trainer(BaseTrainer):
                     self._progress(batch_idx),
                     loss.item()))
                 # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
-
-            if batch_idx == 0 and epoch == 1:
-                self.writer.add_graph(self.model, data)
 
             if batch_idx == self.len_epoch:
                 break
@@ -73,8 +77,13 @@ class Trainer(BaseTrainer):
             val_log = self._valid_epoch(epoch)
             log.update(**{'val_'+k : v for k, v in val_log.items()})
 
-        if self.lr_scheduler is not None:
-            self.lr_scheduler.step()
+            # Step the learning rate scheduler with validation loss
+            if self.lr_scheduler is not None:
+                if isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    self.lr_scheduler.step(val_log['loss'])
+                else:
+                    self.lr_scheduler.step()
+
         return log
 
     def _valid_epoch(self, epoch):
@@ -86,17 +95,24 @@ class Trainer(BaseTrainer):
         """
         self.model.eval()
         self.valid_metrics.reset()
+        auto_regresive_steps = self.config['trainer']['auto_regresive_steps']
+        auto_regresive_idx = 0
         with torch.no_grad():
             for batch_idx, (data, target) in enumerate(self.valid_data_loader):
-                data, target = data.to(self.device), target.to(self.device)
+                x_pollution_data, x_weather_data = data
+                x_pollution_data, x_weather_data = x_pollution_data.to(self.device), x_weather_data.to(self.device)
 
-                output = self.model(data)
-                loss = self.criterion(output, target)
+                y_pollution_data = target[0][:, auto_regresive_idx, :].to(self.device)
+                y_mask_data = target[1][:, auto_regresive_idx, :].to(self.device) 
+                new_target = (y_pollution_data, y_mask_data)
+
+                output = self.model(x_weather_data, x_pollution_data)
+                loss = self.criterion(output, new_target)
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
                 for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, target))
+                    self.valid_metrics.update(met.__name__, met(output, new_target))
                 # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         # add histogram of model parameters to the tensorboard

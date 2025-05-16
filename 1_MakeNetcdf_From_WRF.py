@@ -166,7 +166,7 @@ def process_single_year(args):
         mode = wrfFileType.new
         # input_folder = '/ServerData/WRF_2017_Kraken' # Path to ZION
         # input_folder = '/unity/f1/ozavala/DATA/AirPollutionData/WRF_Data/WRF_2017_Kraken'
-        input_folder = '/LUSTRE/OPERATIVO/EXTERNO-salidas/WRF'
+        input_folder = '/LUSTRE/OPERATIVO/EXTERNO-salidas/WRF' # Path in Quetzal
         result_dates, result_files, result_paths = read_wrf_files_names(
             input_folder, f'{year}-01-01', f'{year + 1}-01-01')
         result_files_coords = None
@@ -255,6 +255,6 @@ if __name__== '__main__':
     years = range(2010, 2025)
     # years = [2021]
     generate_images = True
-    parallel = True
+    parallel = False
 
     process_files(years, variable_names, output_folder, output_folder_imgs, resolution, bbox, generate_images, parallel)
