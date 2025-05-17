@@ -9,6 +9,11 @@ imgs/
 # .vscode
 .vscode/
 
+# runs, saved, tests
+runs/
+saved/
+tests/
+
 # C extensions
 *.so
 

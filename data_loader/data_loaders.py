@@ -70,7 +70,7 @@ class MLforecastDataset(Dataset):
             # Normalize data
             if not os.path.exists(norm_params_file):
                 print("Creating normalization parameters file")
-                pollution_data, weather_data_xarray = create_normalization_data(norm_params_file, pollution_data, weather_data)
+                create_normalization_data(norm_params_file, pollution_data, weather_data)
 
             pollution_data, weather_data_xarray = normalize_data(norm_params_file, pollution_data, weather_data)
 
@@ -240,7 +240,7 @@ if __name__ == '__main__':
     pollution_folder = join(root_folder, "PollutionCSV")
     weather_folder = join(root_folder, "WRF_NetCDF")
     training_folder = join(root_folder, "TrainingData")
-    years = [2010]
+    years = [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]
 
     start_year = min(years)
     end_year = max(years)

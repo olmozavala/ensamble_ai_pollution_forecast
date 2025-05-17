@@ -30,7 +30,7 @@
             "prev_weather_hours": 1,
             "next_weather_hours": 1,
             "auto_regresive_steps": 1,
-            "batch_size": 32,
+            "batch_size": 1024,
             "shuffle": true,
             "validation_split": 0.2,
             "num_workers": 4
@@ -61,7 +61,7 @@
     },
     "trainer": {
         "epochs": 3000,
-        "save_dir": "saved/",
+        "save_dir": "/home/olmozavala/DATA/AirPollution/TrainingData/saved/",
         "save_period": 1,
         "verbosity": 2,
         "monitor": "min val_loss",
