@@ -1,4 +1,4 @@
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Tuple
 from proj_preproc.normalization import normalize_data, denormalize_data, create_normalization_data
 from proj_preproc.viz import visualize_pollutant_vs_weather_var
 import os
@@ -93,9 +93,7 @@ class MLforecastDataset(Dataset):
             # Replace all the nan values with 0
             print("Replacing all the weather nan values with 0")
             self.weather_data = np.nan_to_num(self.weather_data)
-            
-            print(f"Weather array final shape: {weather_array.shape}")
-
+            print(f"Weather array final shape: {self.weather_data.shape}")
             with open(join(training_folder, f'pollution_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
                 pickle.dump(self.pollution_data, f)
             with open(join(training_folder, f'weather_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
@@ -125,20 +123,40 @@ class MLforecastDataset(Dataset):
             self.pollution_data = pd.read_pickle(pollution_data_file)
             self.weather_data = pd.read_pickle(weather_data_file)
 
-        # Select all the columns that start with 'i_cont_' (imputed continuous pollutants)
-        self.pollutant_imputed_columns = [col for col in self.pollution_data.columns if col.startswith('i_cont_')]
-        self.pollutant_only_columns = [col for col in self.pollution_data.columns if col.startswith('cont_')]
+        # ======================== Getting names and indices of the columns ========================
+        # Get both the indices and column names for pollutant columns
+        self.pollutant_columns = [col for col in self.pollution_data.columns if col.startswith('cont_')]
+        self.pollutant_columns_idx = [self.pollution_data.columns.get_loc(col) for col in self.pollutant_columns]
+        # Get the columns and names of the time related inputs
+        self.time_related_columns = [col for col in self.pollution_data.columns if col.endswith(('day', 'week', 'year'))]
+        self.time_related_columns_idx = [self.pollution_data.columns.get_loc(col) for col in self.time_related_columns]
+        # Select the imputed columns names and indeces that start with 'i_cont_' (imputed continuous pollutants)
+        self.imputed_mask_columns = [col for col in self.pollution_data.columns if col.startswith('i_cont_')]
+        self.imputed_mask_columns_idx = [self.pollution_data.columns.get_loc(col) for col in self.imputed_mask_columns]
 
+        # ======================== Dropping the imputed columns from the pollution data ========================
         # Save the imputed columns to a separate dataframe
-        self.pollutant_imputed_data = self.pollution_data[self.pollutant_imputed_columns]
-        # Remove the imputed columns from the pollution data
-        self.pollution_data = self.pollution_data.drop(columns=self.pollutant_imputed_columns)
+        self.pollutant_imputed_data = self.pollution_data[self.imputed_mask_columns]
+        # Remove the imputed columns from the pollution data (it keeps the pollutant column and the time related columns)
+        self.x_input_data = self.pollution_data.drop(columns=self.imputed_mask_columns) # Pollutants and time related columns
+        self.y_output_data = self.pollution_data[self.pollutant_columns] # Pollutants only data    
             
         self.total_dates: int = len(self.pollution_data)
         self.dates = self.pollution_data.index
         self.transform = transform
         print("Done initializing dataset!")
     
+    def get_column_and_index_names(self, column_type: str):
+        """Get the column names and indices of the pollution dataframe"""
+        if column_type == "pollutant_only":
+            return self.pollutant_columns, self.pollutant_columns_idx
+        elif column_type == "imputed_mask":
+            return self.imputed_mask_columns, self.imputed_mask_columns_idx
+        elif column_type == "time":
+            return self.time_related_columns, self.time_related_columns_idx
+        else:
+            raise ValueError(f"Invalid column type: {column_type}")
+
     def __len__(self) -> int:
         """Return the number of samples in the dataset."""
         return self.total_dates
@@ -153,12 +171,13 @@ class MLforecastDataset(Dataset):
             idx = np.random.randint(0, self.total_dates)
         validation_time = time.time() - start_time
 
-        # Get the pollution data for the previous hours up to current index
-        x_pollution = self.pollution_data.iloc[idx-self.prev_pollutant_hours:idx]
+        # Define the input data. x_pollution contains the pollution data and the weather data in a two dimentional tuple
+        x_pollution = self.x_input_data.iloc[idx-self.prev_pollutant_hours:idx]
         x_weather = self.weather_data[idx-self.prev_weather_hours:idx + self.next_weather_hours + self.auto_regresive_steps]
+
+        # Define the output data. y_imputed_pollutant_data contains the imputed pollutant data and y_pollutant_data contains the pollutant data
         y_imputed_pollutant_data = self.pollutant_imputed_data.iloc[idx:idx + self.auto_regresive_steps]
-        y_pollutant_data = self.pollution_data.iloc[idx:idx + self.auto_regresive_steps]
-        y_pollutant_data = y_pollutant_data[self.pollutant_only_columns]
+        y_pollutant_data = self.y_output_data.iloc[idx:idx + self.auto_regresive_steps]
         data_loading_time = time.time() - start_time - validation_time
         
         # Convert numpy arrays to tensors
@@ -174,6 +193,8 @@ class MLforecastDataset(Dataset):
         # print(f"  Tensor conversion: {tensor_conversion_time:.4f}s")
         # print(f"  Total time: {time.time() - start_time:.4f}s")
 
+        # x contains the pollution data and the weather data in a two dimentional tuple
+        # y contains 
         return x, y
 
 
@@ -233,6 +254,14 @@ class MLforecastDataLoader(BaseDataLoader):
 
         super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
 
+    def get_pollution_dataframe(self) -> pd.DataFrame:
+        """Get the pollution dataframe"""
+        return self.dataset.pollution_data
+
+    def get_pollution_column_names_and_indices(self, column_type: str) -> Tuple[List[str], List[int]]:
+        """Get the column names and indices of the pollution dataframe"""
+        return self.dataset.get_column_and_index_names(column_type)
+
     
 if __name__ == '__main__':
     # Test parameters
@@ -266,7 +295,7 @@ if __name__ == '__main__':
         prev_pollutant_hours, prev_weather_hours, next_weather_hours, auto_regresive_steps)
        
     # Create dataloader
-    dataloader = MLforecastDataLoader(
+    data_loader = MLforecastDataLoader(
         pollution_folder=pollution_folder,
         weather_folder=weather_folder,
         training_folder=training_folder,
@@ -281,11 +310,21 @@ if __name__ == '__main__':
     )
     
     # Test loading a batch
-    for batch_idx, batch in enumerate(dataloader):
+
+    pollution_column_names, pollution_column_indices = data_loader.get_pollution_column_names_and_indices("pollutant_only")
+    imputed_mask_columns, imputed_mask_columns_indices = data_loader.get_pollution_column_names_and_indices("imputed_mask")
+    time_related_columns, time_related_columns_indices = data_loader.get_pollution_column_names_and_indices("time")
+    # Print the time related columns
+    print(f"Time related columns: {time_related_columns}")
+    print(f"Time related columns indices: {time_related_columns_indices}")
+
+    for batch_idx, batch in enumerate(data_loader):
         # Print the shape of each element in the batch (x, y)
         print(f"Batch {batch_idx}")
-        print(f"  x pollution shape: {batch[0][0].shape} (batch, prev_pollutant_hours, stations*contaminants)")
+        print(f"  x pollution shape: {batch[0][0].shape} (batch, prev_pollutant_hours, stations*contaminants + time related columns)")
         print(f"  x weather shape: {batch[0][1].shape} (batch, prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)")
         print(f"  y pollution shape: {batch[1][0].shape} (batch, auto_regresive_steps, stations*contaminants)")
         print(f"  y imputed pollution shape: {batch[1][1].shape} (batch, auto_regresive_steps, stations*contaminants)")
+
+        # Here we can plot the data to be sure that the data is loaded correctly
         break
