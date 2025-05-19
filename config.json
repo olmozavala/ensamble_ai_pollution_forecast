@@ -61,7 +61,7 @@
     },
     "trainer": {
         "epochs": 3000,
-        "save_dir": "/home/olmozavala/OUTPUT/AirPollution/",
+        "save_dir": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/",
         "save_period": 1,
         "verbosity": 2,
         "monitor": "min val_loss",
@@ -71,15 +71,21 @@
         "auto_regresive_steps": 1
     },
     "test": {
-        "model_path": "/home/olmozavala/OUTPUT/AirPollution/saved/models/AirPollutionForecast/0516_205943",
-        "ouput_imgs_dir": "/home/olmozavala/OUTPUT/AirPollution/imgs",
+        "model_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/saved/models/AirPollutionForecast/0516_205943",
         "data_loader": {
             "years": [2022, 2023, 2024],
-            "batch_size": 512,
+            "batch_size": 8,
             "shuffle": false,
             "validation_split": 0.0,
             "num_workers": 2,
             "auto_regresive_steps": 24 
+        },
+        "visualize_batch": true,
+        "visualize":{
+            "output_folder": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/imgs",
+            "weather_var_idx": 0,
+            "contaminant_name": "otres",
+            "weather_var_name": "T2"
         }
     }
 }

@@ -1,6 +1,6 @@
 from typing import List, Optional, Callable, Tuple
 from proj_preproc.normalization import normalize_data, denormalize_data, create_normalization_data
-from proj_preproc.viz import visualize_pollutant_vs_weather_var, visualize_pollutant_vs_weather_var_np
+from proj_preproc.viz import visualize_pollutant_vs_weather_var, visualize_batch_data
 import os
 from os.path import join
 from torch.utils.data import Dataset
@@ -194,8 +194,13 @@ class MLforecastDataset(Dataset):
         # print(f"  Total time: {time.time() - start_time:.4f}s")
 
         # x contains the pollution data and the weather data in a two dimentional tuple
-        # y contains 
-        return x, y
+        # y contains the target data and the imputed data in a two dimentional tuple
+        # z contains the current datetime of the data from the pollution dataframe index
+        timestamp = self.x_input_data.iloc[idx].name.timestamp()
+        rounded_timestamp = round(timestamp / 3600) * 3600  # Round to nearest hour
+        current_datetime = torch.tensor(rounded_timestamp, dtype=torch.float)
+
+        return x, y, current_datetime
 
 
 class MLforecastDataLoader(BaseDataLoader):
@@ -264,6 +269,8 @@ class MLforecastDataLoader(BaseDataLoader):
 
     
 if __name__ == '__main__':
+
+    import matplotlib.pyplot as plt
     # Test parameters
     root_folder = "/home/olmozavala/DATA/AirPollution"
     pollution_folder = join(root_folder, "PollutionCSV")
@@ -328,56 +335,25 @@ if __name__ == '__main__':
         print(f"  y imputed pollution shape: {batch[1][1].shape} (batch, auto_regresive_steps, stations*contaminants)")
 
         # Here we can plot the data to be sure that the data is loaded correctly
-        pollution_data = batch[0][0].numpy()[0,:,:]
-        weather_data = batch[0][1].numpy()[0,:,:,:,:]
-        target_data = batch[1][0].numpy()[0,:,:]
-        imputed_data = batch[1][1].numpy()[0,:,:]
+        pollution_data = batch[0][0].numpy()[0,:,:]  # Final shape is (prev_pollutant_hours, stations*contaminants + time related columns)
+        weather_data = batch[0][1].numpy()[0,:,:,:,:]  # Final shape is (prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)
+        target_data = batch[1][0].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
+        imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
+        current_datetime = pd.to_datetime(batch[2].item(), unit='s')
 
         # Plot the pollution data
         # Find all indices that contain "otres" in the name
-        contaminant_name = "otres"  # To plot multiple stations
+        contaminant_name = "pmdiez"  # To plot multiple stations
         # contaminant_name = "cont_otres_MER"  # To plot a single station
         weather_var_idx = 0
         weather_var_name = "T2"
         plot_pollutant_indices = [i for i, name in enumerate(pollution_column_names) if contaminant_name in name]
         
         # Create figure to plot pollution data features
-        import matplotlib.pyplot as plt
         output_folder = "/home/olmozavala/DATA/AirPollution/TrainingData/batch_imgs"
-        fig, axs = plt.subplots(figsize=(15, 8))
-        axs.plot(pollution_data[:, plot_pollutant_indices])
-        axs.set_title('Pollution Data - Otres')
-        axs.set_xlabel('Hour') 
-        axs.set_ylabel('Feature Value')
-        axs.legend([pollution_column_names[i] for i in plot_pollutant_indices])
-        # Include the target data
-        for i in range(len(plot_pollutant_indices)):
-            x_range = range(pollution_data.shape[0], pollution_data.shape[0] + target_data.shape[0])
-            axs.plot(x_range, target_data[:, plot_pollutant_indices[i]], color='red', label='Target' if i == 0 else None)
-        # Finally include the imputed data
-        axs.scatter([range(pollution_data.shape[0], pollution_data.shape[0] + target_data.shape[0]) for _ in range(len(plot_pollutant_indices))],
-                    imputed_data[:, plot_pollutant_indices], color='blue', label='Imputed')
-        # Include the average of the weather data
-        axs.scatter(range(pollution_data.shape[0] - prev_weather_hours - 1, pollution_data.shape[0] + next_weather_hours + auto_regresive_steps - 1), 
-                    weather_data[:, weather_var_idx, :, :].mean(axis=(1,2)), color='black', label=weather_var_name)
-
-        # Add legend
-        axs.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.tight_layout()
-        plt.savefig(join(output_folder, f'{batch_idx}_{contaminant_name}_pollution_data_plot.png'))
-        plt.close(fig)
-
-        # Second plot the weather data
-        start_hour = 0 - prev_weather_hours
-        time_steps = weather_data.shape[0]
-        fig, axs = plt.subplots(1, time_steps, figsize=(15, 8))
-        for i in range(time_steps):
-            axs[i].imshow(weather_data[i, weather_var_idx, :, :])
-            axs[i].set_title(f'Weather Data - {weather_var_name} - Hour {start_hour + i}', fontsize=10)
-            axs[i].set_xlabel('Lon') 
-            axs[i].set_ylabel('Lat')
-        plt.tight_layout()
-        plt.savefig(join(output_folder, f'{batch_idx}_{weather_var_name}_weather_data_plot.png'))
-        plt.close(fig)
+        visualize_batch_data(pollution_data, target_data, imputed_data, weather_data, 
+                             plot_pollutant_indices, pollution_column_names, time_related_columns, time_related_columns_indices, weather_var_name, 
+                             current_datetime, output_folder, batch_idx, prev_weather_hours, next_weather_hours, 
+                             auto_regresive_steps, weather_var_idx, contaminant_name)
         if batch_idx > 5:
             break

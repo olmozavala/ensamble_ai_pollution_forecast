@@ -7,6 +7,7 @@ import model.loss as module_loss
 import model.metric as module_metric
 import model.model as module_arch
 from parse_config import ConfigParser
+from proj_preproc.viz import visualize_batch_data, visualize_pollution_input
 from os.path import join
 import os
 
@@ -46,7 +47,7 @@ def main(config):
     total_predicted_hours = config['test']['data_loader']['auto_regresive_steps'] # 0 Is the 'next' hour, 1 is the 'next next' hour, etc.
     weather_window_size = config['data_loader']['args']['prev_weather_hours'] + config['data_loader']['args']['next_weather_hours'] + 1
     
-    output_imgs_dir = config['test']['ouput_imgs_dir']
+    output_imgs_dir = config['test']['visualize']['output_folder']
     # Create outptu dir if it doesnt' exist
     if not os.path.exists(output_imgs_dir):
         os.makedirs(output_imgs_dir)
@@ -55,49 +56,75 @@ def main(config):
     imputed_mask_columns, imputed_mask_columns_indices = data_loader.get_pollution_column_names_and_indices("imputed_mask")
     time_related_columns, time_related_columns_indices = data_loader.get_pollution_column_names_and_indices("time")
 
-    plot_pollutant_name = "otres"
+    contaminant_name = config['test']['visualize']['contaminant_name']
+    weather_var_name = config['test']['visualize']['weather_var_name']
+    weather_var_idx = config['test']['visualize']['weather_var_idx']
+    prev_weather_hours = config['data_loader']['args']['prev_weather_hours']
+    next_weather_hours = config['data_loader']['args']['next_weather_hours']
+    auto_regresive_steps = config['data_loader']['args']['auto_regresive_steps']
+
     # Find all indices that contain the pollutant name
-    plot_pollutant_column_indices = [i for i, name in enumerate(pollution_column_names) if plot_pollutant_name in name]
+    plot_pollutant_indices = [i for i, name in enumerate(pollution_column_names) if contaminant_name in name]
 
     with torch.no_grad():
-        for batch_id, (data, target) in enumerate(tqdm(data_loader)):
-            x_pollution_data, x_weather_data = data
-            x_pollution_data, x_weather_data = x_pollution_data.to(device), x_weather_data.to(device)
+        for batch_idx, batch in enumerate(tqdm(data_loader)):
+
+            if config['test']['visualize_batch']:
+                print(f"Batch {batch_idx}")
+                print(f"  x pollution shape: {batch[0][0].shape} (batch, prev_pollutant_hours, stations*contaminants + time related columns)")
+                print(f"  x weather shape: {batch[0][1].shape} (batch, prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)")
+                print(f"  y pollution shape: {batch[1][0].shape} (batch, auto_regresive_steps, stations*contaminants)")
+                print(f"  y imputed pollution shape: {batch[1][1].shape} (batch, auto_regresive_steps, stations*contaminants)")
+
+                # Here we can plot the data to be sure that the data is loaded correctly
+                viz_pollution_data = batch[0][0].numpy()[0,:,:]  # Final shape is (prev_pollutant_hours, stations*contaminants + time related columns)
+                viz_weather_data = batch[0][1].numpy()[0,:,:,:,:]  # Final shape is (prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)
+                viz_target_data = batch[1][0].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
+                viz_imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
+
+                visualize_batch_data(viz_pollution_data, viz_target_data, viz_imputed_data, viz_weather_data, 
+                                    plot_pollutant_indices, pollution_column_names, weather_var_name, 
+                                    output_imgs_dir, batch_idx, prev_weather_hours, next_weather_hours, 
+                                    auto_regresive_steps, weather_var_idx, contaminant_name)
+
+            x_pollution_data = batch[0][0].to(device)
+            x_weather_data = batch[0][1].to(device)
+            target = batch[1][0].to(device)
+            y_mask_data = batch[1][1].to(device)
+            current_datetime = batch[2].to(device)
 
             predicted_outputs = []
             for predicted_hour in range(total_predicted_hours):
                 cur_weather_input = x_weather_data[:, predicted_hour:predicted_hour+weather_window_size, :]
-
-                # We need to plot all the inputs to be sure that the model is working correctly
-                # Create two figures to plot pollution data features
-                plt.figure(figsize=(15, 8))
-                plt.plot(x_pollution_data[3, :, plot_pollutant_column_indices].cpu().numpy())
-                plt.title(f'{plot_pollutant_name} - Hour {predicted_hour}')
-                plt.xlabel('Hour (but dont know the starting hou)')
-                plt.ylabel('Feature Value') 
-                plt.tight_layout()
-                plt.savefig(f'{output_imgs_dir}/{batch_id}_pollution_features_1_hour_{predicted_hour}.png')
-                plt.close()
 
                 output = model(cur_weather_input, x_pollution_data)
                 predicted_outputs.append(output)
 
                 # Shift all hours forward by 1 (dropping last hour)
                 x_pollution_data = x_pollution_data[:, 1:, :]
+
+                if config['test']['visualize_batch']:
+                    visualize_pollution_input(x_pollution_data.cpu().numpy(), output_imgs_dir, 
+                                              plot_pollutant_indices, pollution_column_names, 
+                                              contaminant_name, predicted_hour, current_datetime)
+
+                # We need to identify the day, year, and hour of the data in order to generate
+                # the missing columns for time related columns
+
                 # Add model output as new first hour
-                x_pollution_data = torch.cat([predicted_outputs[predicted_hour].unsqueeze(1), x_pollution_data], dim=1)
+                # x_pollution_data = torch.cat([predicted_outputs[predicted_hour].unsqueeze(1), x_pollution_data], dim=1)
 
-
+            break
             y_pollution_data = target[0][:, predicted_hour, :].to(device)
             y_mask_data = target[1][:, predicted_hour, :].to(device) 
             new_target = (y_pollution_data, y_mask_data)
 
-            # computing loss, metrics on test set
-            loss = loss_fn(output, target)
-            batch_size = data.shape[0]
-            total_loss += loss.item() * batch_size
-            for i, metric in enumerate(metric_fns):
-                total_metrics[i] += metric(output, target) * batch_size
+            # # computing loss, metrics on test set
+            # loss = loss_fn(output, target)
+            # batch_size = data.shape[0]
+            # total_loss += loss.item() * batch_size
+            # for i, metric in enumerate(metric_fns):
+            #     total_metrics[i] += metric(output, target) * batch_size
 
     n_samples = len(data_loader.sampler)
     log = {'loss': total_loss / n_samples}
