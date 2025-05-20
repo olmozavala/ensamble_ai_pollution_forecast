@@ -43,26 +43,123 @@ def create_imputation_columns(df, columns):
         df_imputed[new_col_name] = df_imputed[col].apply(lambda x: 'none' if pd.notna(x) else -1)
     return df_imputed
 
+def generate_climatology(df, value_columns):
+    """
+    Genera un DataFrame con la climatología para cada hora del año usando un promedio móvil de 3 días.
+    
+    Args:
+        df: DataFrame con índice datetime
+        value_columns: Lista de columnas para las que calcular la climatología
+        
+    Returns:
+        DataFrame con la climatología para cada hora del año
+    """
+    # Crear un DataFrame para almacenar la climatología
+    climatology = pd.DataFrame(index=pd.date_range(start='2010-01-01 00:00:00', 
+                                                 end='2010-12-31 23:00:00', 
+                                                 freq='H'))
+    
+    # Para cada columna, calcular el promedio por hora del año
+    for col in value_columns:
+        # Agrupar por mes, día y hora
+        hourly_means = df.groupby([df.index.month, df.index.day, df.index.hour])[col].mean()
+        
+        # Crear un índice datetime para el año 2010
+        hourly_means.index = pd.to_datetime([f'2010-{m:02d}-{d:02d} {h:02d}:00:00' 
+                                           for m, d, h in hourly_means.index])
+        
+        # Aplicar promedio móvil de 3 días
+        climatology[col] = hourly_means.rolling(window=3, center=True, min_periods=1).mean()
+        
+        # Manejar los bordes del año
+        climatology[col].iloc[0] = (climatology[col].iloc[-1] + climatology[col].iloc[0] + climatology[col].iloc[1]) / 3
+        climatology[col].iloc[-1] = (climatology[col].iloc[-2] + climatology[col].iloc[-1] + climatology[col].iloc[0]) / 3
+    
+    return climatology
+
 columns_otres = [col for col in data_df.columns if col.startswith('cont_otres_')]
 data_imputed = create_imputation_columns(data_df, columns_otres)
 
+# Generar climatología para cont_otres_
+climatology_otres = generate_climatology(data_df, columns_otres)
+
+# Guardar la climatología
+output_folder = '/ZION/AirPollutionData/Data/MergedDataCSV/16/Climatology/'
+create_folder(output_folder)
+climatology_otres.to_csv(os.path.join(output_folder, 'climatology_otres.csv'))
+
 # %%
+# Calculate climatology
+def calculate_climatology(df, value_columns):
+    """
+    Calcula la climatología para cada hora del año usando un promedio móvil de 3 días.
+    
+    Args:
+        df: DataFrame con índice datetime
+        value_columns: Lista de columnas para las que calcular la climatología
+        
+    Returns:
+        DataFrame con la climatología para cada hora del año
+    """
+    # Crear un DataFrame para almacenar la climatología
+    climatology = pd.DataFrame(index=pd.date_range(start='2010-01-01 00:00:00', 
+                                                 end='2010-12-31 23:00:00', 
+                                                 freq='H'))
+    
+    # Para cada columna, calcular el promedio por hora del año
+    for col in value_columns:
+        # Agrupar por mes, día y hora
+        hourly_means = df.groupby([df.index.month, df.index.day, df.index.hour])[col].mean()
+        
+        # Crear un índice datetime para el año 2010
+        hourly_means.index = pd.to_datetime([f'2010-{m:02d}-{d:02d} {h:02d}:00:00' 
+                                           for m, d, h in hourly_means.index])
+        
+        # Aplicar promedio móvil de 3 días
+        climatology[col] = hourly_means.rolling(window=3, center=True, min_periods=1).mean()
+        
+        # Manejar los bordes del año
+        climatology[col].iloc[0] = (climatology[col].iloc[-1] + climatology[col].iloc[0] + climatology[col].iloc[1]) / 3
+        climatology[col].iloc[-1] = (climatology[col].iloc[-2] + climatology[col].iloc[-1] + climatology[col].iloc[0]) / 3
+    
+    return climatology
+
 # Impute with row average or persistence
 def impute_with_row_avg_or_persistence(df, value_columns):
     df_imputed = df.copy()
+    
+    # Calcular la climatología
+    climatology = calculate_climatology(df, value_columns)
+    
     for col in value_columns:
         flag_col_name = f"i_{col}"
         mask_missing = (df[flag_col_name] == -1)
+        
+        # Primero intentar con promedio de fila
         mask_avg = mask_missing & (df[value_columns].notna().sum(axis=1) > 5)
         df_imputed.loc[mask_avg, col] = df_imputed.loc[mask_avg, value_columns].mean(axis=1, skipna=True)
         df_imputed.loc[mask_avg, flag_col_name] = 'row_avg'
+        
+        # Luego intentar con persistencia
         mask_remaining = mask_missing & (df_imputed[flag_col_name] == -1)
         prev_day_indices = df.index[mask_remaining] - pd.Timedelta(days=1)
         valid_last_day_indices = df.index.intersection(prev_day_indices)
         mask_last_day = df.index.isin(valid_last_day_indices)
         df_imputed.loc[mask_last_day, col] = df.loc[prev_day_indices.intersection(valid_last_day_indices), col].values
         df_imputed.loc[mask_last_day, flag_col_name] = 'last_day_same_hour'
-        df_imputed.loc[mask_remaining & (df_imputed[flag_col_name] == -1), col] = -1
+        
+        # Finalmente, usar climatología para los valores restantes
+        mask_remaining = mask_missing & (df_imputed[flag_col_name] == -1)
+        for idx in df.index[mask_remaining]:
+            # Obtener el mes, día y hora correspondiente
+            month = idx.month
+            day = idx.day
+            hour = idx.hour
+            # Usar el valor climatológico correspondiente
+            climatology_idx = pd.Timestamp(f'2010-{month:02d}-{day:02d} {hour:02d}:00:00')
+            df_imputed.loc[idx, col] = climatology.loc[climatology_idx, col]
+            df_imputed.loc[idx, flag_col_name] = 'climatology'
+    
     return df_imputed
 
 value_columns_otres = [col for col in data_df.columns if col.startswith('cont_otres_')]
@@ -76,12 +173,14 @@ data_imputed = data_imputed.reindex(full_index)
 # %%
 # Count imputation flags
 def count_imputation_flags(df, flag_columns):
-    counts = {'-1': 0, 'none': 0, 'row_avg': 0}
+    counts = {'-1': 0, 'none': 0, 'row_avg': 0, 'last_day_same_hour': 0, 'climatology': 0}
     for col in flag_columns:
         value_counts = df[col].value_counts()
         counts['-1'] += value_counts.get(-1, 0)
         counts['none'] += value_counts.get('none', 0)
         counts['row_avg'] += value_counts.get('row_avg', 0)
+        counts['last_day_same_hour'] += value_counts.get('last_day_same_hour', 0)
+        counts['climatology'] += value_counts.get('climatology', 0)
     return counts
 
 flag_columns_otres = [col for col in data_imputed.columns if col.startswith('i_')]
@@ -113,6 +212,10 @@ for group in column_groups:
     data_imputed = create_imputation_columns(data_imputed, columns)
     value_columns = [col for col in data_df.columns if col.startswith(group)]
     data_imputed = impute_with_row_avg_or_persistence(data_imputed, value_columns)
+    
+    # Generar climatología para cada grupo
+    climatology = generate_climatology(data_df, columns)
+    climatology.to_csv(os.path.join(output_folder, f'climatology_{group.replace("cont_", "").replace("_", "")}.csv'))
 
 # %%
 # Contar flags de imputación para todas las categorías
