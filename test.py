@@ -10,6 +10,7 @@ import model.metric as module_metric
 import model.model as module_arch
 from parse_config import ConfigParser
 from proj_preproc.viz import visualize_batch_data, visualize_pollution_input
+from proj_io.inout import generateDateColumns
 from os.path import join
 import os
 
@@ -106,23 +107,29 @@ def main(config):
 
                 if config['test']['visualize_batch']:
                     visualize_pollution_input(x_pollution_data.cpu().numpy(), 
+                                              cur_weather_input.cpu().numpy(),
                                               target.cpu().numpy(),
                                               output_imgs_dir, 
                                               plot_pollutant_indices, pollution_column_names, 
+                                              time_related_columns, time_related_columns_indices,
                                               contaminant_name, 
                                               batch_predictedtimes[0].hour,
-                                              predicted_hour)
+                                              predicted_hour,
+                                              prev_weather_hours,
+                                              next_weather_hours,
+                                              auto_regresive_steps,
+                                              weather_var_idx,
+                                              weather_var_name)
 
                 # Shift the pollution data and time related columns forward by 1 hour (dropping last hour)
                 saved_data = x_pollution_data[:, 1:, :].clone()  # If I don't clone, the data is overwritten and it doesn't look right
                 x_pollution_data[:, 0:-1, :] = saved_data
                 x_pollution_data[:, -1, pollution_column_indices] = output
 
-                # Replace the time related columns with the next hour
-                # cur_datetime = batch_predictedtimes + pd.Timedelta(hours=predicted_hour)
-                # Compute the time related columns
-                # new_time_related_columns = np.zeros((x_pollution_data.shape[0], len(time_related_columns)))
-                # x_pollution_data[:, 0, time_related_columns_indices] = time_related_columns
+                # Generate Date columns
+                batch_predictedtimes = batch_predictedtimes + pd.Timedelta(hours=1)
+                new_date_columns = np.array([generateDateColumns([x])[1] for x in batch_predictedtimes], dtype=np.float32).squeeze()
+                x_pollution_data[:, -1, time_related_columns_indices] = torch.from_numpy(new_date_columns).to(device)
 
             break
             y_pollution_data = target[0][:, predicted_hour, :].to(device)

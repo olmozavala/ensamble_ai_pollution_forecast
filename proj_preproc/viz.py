@@ -165,13 +165,21 @@ def visualize_batch_data( pollution_data: np.ndarray,
     plt.close(fig)
 
 def visualize_pollution_input( pollution_data: np.ndarray,
+                               weather_data: np.ndarray,
                                target_data: np.ndarray,
                                output_folder: str,
                                plot_pollutant_indices: list,
                                pollution_column_names: list,
+                               time_related_columns: list,
+                               time_related_indices: list,
                                contaminant_name: str,
                                current_hour: int,
                                predicted_hour: int,
+                               prev_weather_hours: int,
+                               next_weather_hours: int,
+                               auto_regresive_steps: int,
+                               weather_var_idx: int,
+                               weather_var_name: str
                                ) -> None:
     """
     Visualize pollution input data.
@@ -186,6 +194,8 @@ def visualize_pollution_input( pollution_data: np.ndarray,
     input_hours = range(first_input_hour, first_input_hour + total_input_hours)
     first_target_hour = current_hour
     target_hours = range(first_target_hour, first_target_hour + total_target_hours)
+    first_weather_hour = predicted_hour + current_hour - prev_weather_hours 
+    weather_hours = range(first_weather_hour, first_weather_hour + prev_weather_hours + next_weather_hours + 1)
 
     # Plot each pollutant with a consistent color
     for idx, pollutant_idx in enumerate(plot_pollutant_indices):
@@ -193,9 +203,21 @@ def visualize_pollution_input( pollution_data: np.ndarray,
         axs.plot(input_hours, pollution_data[0, :, pollutant_idx], color=color)
         axs.scatter(target_hours, target_data[0, :, pollutant_idx], color=color, label='Target')
 
+    # Include the average of the weather data
+    axs.scatter(weather_hours, weather_data[0, :, weather_var_idx, :, :].mean(axis=(1,2)), color='black', label=weather_var_name, s=100)
+
     axs.set_title('Pollution Data - Otres')
     axs.set_xlabel('Hour')
     axs.legend([pollution_column_names[i] for i in plot_pollutant_indices])
     plt.tight_layout()
     plt.savefig(join(output_folder, f'{predicted_hour}_{contaminant_name}_pollution_only_data_plot.png'))
+    plt.close(fig)
+
+    # In a new figure plot the time related columns
+    fig, axs = plt.subplots(figsize=(15, 8))
+    axs.plot(pollution_data[0, :, time_related_indices].T)
+    axs.set_title(f'Time Related Columns')
+    axs.legend(time_related_columns)
+    plt.tight_layout()
+    plt.savefig(join(output_folder, f'{predicted_hour}_{contaminant_name}_time_related_columns_plot.png'))
     plt.close(fig)
