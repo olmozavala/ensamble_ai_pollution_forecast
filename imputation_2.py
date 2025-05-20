@@ -47,6 +47,7 @@ def generate_climatology(df, value_columns):
     """
     Genera un DataFrame con la climatología para cada hora del año usando un promedio móvil de 3 días.
     La climatología se calcula usando todos los años disponibles en el DataFrame.
+    Los valores NaN son ignorados en los cálculos.
     
     Args:
         df: DataFrame con índice datetime
@@ -56,7 +57,6 @@ def generate_climatology(df, value_columns):
         DataFrame con la climatología para cada hora del año
     """
     # Crear un DataFrame para almacenar la climatología usando el año 2010 como referencia
-    # (podríamos usar cualquier año ya que solo usamos mes, día y hora)
     climatology = pd.DataFrame(index=pd.date_range(start='2010-01-01 00:00:00', 
                                                  end='2010-12-31 23:00:00', 
                                                  freq='h'))
@@ -64,28 +64,36 @@ def generate_climatology(df, value_columns):
     # Para cada columna, calcular el promedio por hora del año usando todos los años disponibles
     for col in value_columns:
         # Agrupar por mes, día y hora, calculando el promedio a través de todos los años
-        hourly_means = df.groupby([df.index.month, df.index.day, df.index.hour])[col].mean()
+        # skipna=True para ignorar NaN en el cálculo del promedio
+        hourly_means = df.groupby([df.index.month, df.index.day, df.index.hour])[col].mean(skipna=True)
         
         # Crear un índice datetime para el año 2010 (solo como referencia)
-        # Usamos el índice de climatology que ya tiene todas las fechas válidas
         hourly_means_dict = {}
         for (month, day, hour), value in hourly_means.items():
             try:
                 date = pd.Timestamp(f'2010-{month:02d}-{day:02d} {hour:02d}:00:00')
-                hourly_means_dict[date] = value
+                # Solo guardamos el valor si no es NaN
+                if not pd.isna(value):
+                    hourly_means_dict[date] = value
             except ValueError:
-                # Si la fecha no es válida (ej: 31 de febrero), la saltamos
                 continue
         
         # Convertir el diccionario a Series y asignar a climatology
         climatology[col] = pd.Series(hourly_means_dict)
         
         # Aplicar promedio móvil de 3 días para suavizar la climatología
+        # min_periods=1 para permitir promedios con menos de 3 puntos
         climatology[col] = climatology[col].rolling(window=3, center=True, min_periods=1).mean()
         
         # Manejar los bordes del año usando valores del otro extremo del año
-        climatology[col].iloc[0] = (climatology[col].iloc[-1] + climatology[col].iloc[0] + climatology[col].iloc[1]) / 3
-        climatology[col].iloc[-1] = (climatology[col].iloc[-2] + climatology[col].iloc[-1] + climatology[col].iloc[0]) / 3
+        # Solo si tenemos valores válidos
+        if not climatology[col].isna().all():
+            first_valid = climatology[col].first_valid_index()
+            last_valid = climatology[col].last_valid_index()
+            
+            if first_valid is not None and last_valid is not None:
+                climatology[col].iloc[0] = (climatology[col].iloc[-1] + climatology[col].iloc[0] + climatology[col].iloc[1]) / 3
+                climatology[col].iloc[-1] = (climatology[col].iloc[-2] + climatology[col].iloc[-1] + climatology[col].iloc[0]) / 3
     
     return climatology
 
