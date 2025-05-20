@@ -46,6 +46,7 @@ def create_imputation_columns(df, columns):
 def generate_climatology(df, value_columns):
     """
     Genera un DataFrame con la climatología para cada hora del año usando un promedio móvil de 3 días.
+    La climatología se calcula usando todos los años disponibles en el DataFrame.
     
     Args:
         df: DataFrame con índice datetime
@@ -54,24 +55,35 @@ def generate_climatology(df, value_columns):
     Returns:
         DataFrame con la climatología para cada hora del año
     """
-    # Crear un DataFrame para almacenar la climatología
+    # Crear un DataFrame para almacenar la climatología usando el año 2010 como referencia
+    # (podríamos usar cualquier año ya que solo usamos mes, día y hora)
     climatology = pd.DataFrame(index=pd.date_range(start='2010-01-01 00:00:00', 
                                                  end='2010-12-31 23:00:00', 
-                                                 freq='H'))
+                                                 freq='h'))
     
-    # Para cada columna, calcular el promedio por hora del año
+    # Para cada columna, calcular el promedio por hora del año usando todos los años disponibles
     for col in value_columns:
-        # Agrupar por mes, día y hora
+        # Agrupar por mes, día y hora, calculando el promedio a través de todos los años
         hourly_means = df.groupby([df.index.month, df.index.day, df.index.hour])[col].mean()
         
-        # Crear un índice datetime para el año 2010
-        hourly_means.index = pd.to_datetime([f'2010-{m:02d}-{d:02d} {h:02d}:00:00' 
-                                           for m, d, h in hourly_means.index])
+        # Crear un índice datetime para el año 2010 (solo como referencia)
+        # Usamos el índice de climatology que ya tiene todas las fechas válidas
+        hourly_means_dict = {}
+        for (month, day, hour), value in hourly_means.items():
+            try:
+                date = pd.Timestamp(f'2010-{month:02d}-{day:02d} {hour:02d}:00:00')
+                hourly_means_dict[date] = value
+            except ValueError:
+                # Si la fecha no es válida (ej: 31 de febrero), la saltamos
+                continue
         
-        # Aplicar promedio móvil de 3 días
-        climatology[col] = hourly_means.rolling(window=3, center=True, min_periods=1).mean()
+        # Convertir el diccionario a Series y asignar a climatology
+        climatology[col] = pd.Series(hourly_means_dict)
         
-        # Manejar los bordes del año
+        # Aplicar promedio móvil de 3 días para suavizar la climatología
+        climatology[col] = climatology[col].rolling(window=3, center=True, min_periods=1).mean()
+        
+        # Manejar los bordes del año usando valores del otro extremo del año
         climatology[col].iloc[0] = (climatology[col].iloc[-1] + climatology[col].iloc[0] + climatology[col].iloc[1]) / 3
         climatology[col].iloc[-1] = (climatology[col].iloc[-2] + climatology[col].iloc[-1] + climatology[col].iloc[0]) / 3
     
@@ -82,6 +94,34 @@ data_imputed = create_imputation_columns(data_df, columns_otres)
 
 # Generar climatología para cont_otres_
 climatology_otres = generate_climatology(data_df, columns_otres)
+
+# Visualizar la climatología
+def plot_climatology(climatology_df, title="Climatología"):
+    """
+    Genera un gráfico alargado de la climatología para todas las columnas.
+    
+    Args:
+        climatology_df: DataFrame con la climatología
+        title: Título del gráfico
+    """
+    plt.figure(figsize=(20, 6))
+    for col in climatology_df.columns:
+        plt.plot(climatology_df.index, climatology_df[col], label=col, alpha=0.7)
+    
+    plt.title(title)
+    plt.xlabel('Fecha')
+    plt.ylabel('Valor')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True)
+    plt.tight_layout()
+    
+    # Guardar el gráfico
+    output_folder = '/ZION/AirPollutionData/Data/MergedDataCSV/16/Climatology/'
+    create_folder(output_folder)
+    plt.savefig(os.path.join(output_folder, f'{title.lower().replace(" ", "_")}.png'))
+    plt.close()
+
+plot_climatology(climatology_otres, "Climatología de Otres")
 
 # Guardar la climatología
 output_folder = '/ZION/AirPollutionData/Data/MergedDataCSV/16/Climatology/'
@@ -215,6 +255,9 @@ for group in column_groups:
     
     # Generar climatología para cada grupo
     climatology = generate_climatology(data_df, columns)
+    # Visualizar la climatología
+    plot_climatology(climatology, f"Climatología de {group.replace('cont_', '').replace('_', '')}")
+    # Guardar la climatología
     climatology.to_csv(os.path.join(output_folder, f'climatology_{group.replace("cont_", "").replace("_", "")}.csv'))
 
 # %%
