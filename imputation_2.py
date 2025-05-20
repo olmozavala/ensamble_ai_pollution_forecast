@@ -48,6 +48,7 @@ def generate_climatology(df, value_columns):
     Genera un DataFrame con la climatología para cada hora del año usando un promedio móvil de 3 días.
     La climatología se calcula usando todos los años disponibles en el DataFrame.
     Los valores NaN son ignorados en los cálculos.
+    Usa 2012 como año de referencia por ser bisiesto.
     
     Args:
         df: DataFrame con índice datetime
@@ -56,22 +57,22 @@ def generate_climatology(df, value_columns):
     Returns:
         DataFrame con la climatología para cada hora del año
     """
-    # Crear un DataFrame para almacenar la climatología usando el año 2010 como referencia
-    climatology = pd.DataFrame(index=pd.date_range(start='2010-01-01 00:00:00', 
-                                                 end='2010-12-31 23:00:00', 
+    # Crear un DataFrame para almacenar la climatología usando el año 2012 como referencia (año bisiesto)
+    climatology = pd.DataFrame(index=pd.date_range(start='2012-01-01 00:00:00', 
+                                                 end='2012-12-31 23:00:00', 
                                                  freq='h'))
     
     # Para cada columna, calcular el promedio por hora del año usando todos los años disponibles
     for col in value_columns:
         # Agrupar por mes, día y hora, calculando el promedio a través de todos los años
-        # skipna=True para ignorar NaN en el cálculo del promedio
-        hourly_means = df.groupby([df.index.month, df.index.day, df.index.hour])[col].mean(skipna=True)
+        # mean() ignora NaN por defecto
+        hourly_means = df.groupby([df.index.month, df.index.day, df.index.hour])[col].mean()
         
-        # Crear un índice datetime para el año 2010 (solo como referencia)
+        # Crear un índice datetime para el año 2012 (solo como referencia)
         hourly_means_dict = {}
         for (month, day, hour), value in hourly_means.items():
             try:
-                date = pd.Timestamp(f'2010-{month:02d}-{day:02d} {hour:02d}:00:00')
+                date = pd.Timestamp(f'2012-{month:02d}-{day:02d} {hour:02d}:00:00')
                 # Solo guardamos el valor si no es NaN
                 if not pd.isna(value):
                     hourly_means_dict[date] = value
