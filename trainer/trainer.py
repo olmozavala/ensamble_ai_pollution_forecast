@@ -98,7 +98,7 @@ class Trainer(BaseTrainer):
         auto_regresive_steps = self.config['trainer']['auto_regresive_steps']
         auto_regresive_idx = 0
         with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(self.valid_data_loader):
+            for batch_idx, (data, target, current_datetime) in enumerate(self.valid_data_loader):
                 x_pollution_data, x_weather_data = data
                 x_pollution_data, x_weather_data = x_pollution_data.to(self.device), x_weather_data.to(self.device)
 

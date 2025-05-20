@@ -165,20 +165,37 @@ def visualize_batch_data( pollution_data: np.ndarray,
     plt.close(fig)
 
 def visualize_pollution_input( pollution_data: np.ndarray,
+                               target_data: np.ndarray,
                                output_folder: str,
                                plot_pollutant_indices: list,
                                pollution_column_names: list,
                                contaminant_name: str,
-                               predicted_hour: int
+                               current_hour: int,
+                               predicted_hour: int,
                                ) -> None:
     """
     Visualize pollution input data.
     """
     fig, axs = plt.subplots(figsize=(15, 8))
-    axs.plot(pollution_data[0, :, plot_pollutant_indices])
+    # Define a fixed color cycle
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    total_input_hours = pollution_data.shape[1]
+    total_target_hours = target_data.shape[1]
+
+    first_input_hour = predicted_hour + current_hour - total_input_hours
+    input_hours = range(first_input_hour, first_input_hour + total_input_hours)
+    first_target_hour = current_hour
+    target_hours = range(first_target_hour, first_target_hour + total_target_hours)
+
+    # Plot each pollutant with a consistent color
+    for idx, pollutant_idx in enumerate(plot_pollutant_indices):
+        color = colors[idx % len(colors)]  # Cycle through colors if more pollutants than colors
+        axs.plot(input_hours, pollution_data[0, :, pollutant_idx], color=color)
+        axs.scatter(target_hours, target_data[0, :, pollutant_idx], color=color, label='Target')
+
     axs.set_title('Pollution Data - Otres')
-    axs.set_xlabel('Hour') 
+    axs.set_xlabel('Hour')
     axs.legend([pollution_column_names[i] for i in plot_pollutant_indices])
     plt.tight_layout()
-    plt.savefig(join(output_folder, f'{predicted_hour}_{contaminant_name}_pollution_data_plot.png'))
+    plt.savefig(join(output_folder, f'{predicted_hour}_{contaminant_name}_pollution_only_data_plot.png'))
     plt.close(fig)

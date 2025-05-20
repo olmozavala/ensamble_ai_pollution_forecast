@@ -1,5 +1,7 @@
 import argparse
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import torch
 from tqdm import tqdm
 import data_loader.data_loaders as module_data
@@ -69,6 +71,12 @@ def main(config):
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(data_loader)):
 
+            x_pollution_data = batch[0][0].to(device)
+            x_weather_data = batch[0][1].to(device)
+            target = batch[1][0].to(device)
+            y_mask_data = batch[1][1].to(device)
+            batch_predictedtimes = pd.to_datetime(batch[2], unit='s')
+
             if config['test']['visualize_batch']:
                 print(f"Batch {batch_idx}")
                 print(f"  x pollution shape: {batch[0][0].shape} (batch, prev_pollutant_hours, stations*contaminants + time related columns)")
@@ -83,36 +91,38 @@ def main(config):
                 viz_imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
 
                 visualize_batch_data(viz_pollution_data, viz_target_data, viz_imputed_data, viz_weather_data, 
-                                    plot_pollutant_indices, pollution_column_names, weather_var_name, 
-                                    output_imgs_dir, batch_idx, prev_weather_hours, next_weather_hours, 
-                                    auto_regresive_steps, weather_var_idx, contaminant_name)
+                             plot_pollutant_indices, pollution_column_names, time_related_columns, time_related_columns_indices, weather_var_name, 
+                             batch_predictedtimes[0], output_imgs_dir, batch_idx, prev_weather_hours, next_weather_hours, 
+                             auto_regresive_steps, weather_var_idx, contaminant_name)
 
-            x_pollution_data = batch[0][0].to(device)
-            x_weather_data = batch[0][1].to(device)
-            target = batch[1][0].to(device)
-            y_mask_data = batch[1][1].to(device)
-            current_datetime = batch[2].to(device)
 
             predicted_outputs = []
             for predicted_hour in range(total_predicted_hours):
+                # Set the current weather window input
                 cur_weather_input = x_weather_data[:, predicted_hour:predicted_hour+weather_window_size, :]
 
                 output = model(cur_weather_input, x_pollution_data)
                 predicted_outputs.append(output)
 
-                # Shift all hours forward by 1 (dropping last hour)
-                x_pollution_data = x_pollution_data[:, 1:, :]
-
                 if config['test']['visualize_batch']:
-                    visualize_pollution_input(x_pollution_data.cpu().numpy(), output_imgs_dir, 
+                    visualize_pollution_input(x_pollution_data.cpu().numpy(), 
+                                              target.cpu().numpy(),
+                                              output_imgs_dir, 
                                               plot_pollutant_indices, pollution_column_names, 
-                                              contaminant_name, predicted_hour, current_datetime)
+                                              contaminant_name, 
+                                              batch_predictedtimes[0].hour,
+                                              predicted_hour)
 
-                # We need to identify the day, year, and hour of the data in order to generate
-                # the missing columns for time related columns
+                # Shift the pollution data and time related columns forward by 1 hour (dropping last hour)
+                saved_data = x_pollution_data[:, 1:, :].clone()  # If I don't clone, the data is overwritten and it doesn't look right
+                x_pollution_data[:, 0:-1, :] = saved_data
+                x_pollution_data[:, -1, pollution_column_indices] = output
 
-                # Add model output as new first hour
-                # x_pollution_data = torch.cat([predicted_outputs[predicted_hour].unsqueeze(1), x_pollution_data], dim=1)
+                # Replace the time related columns with the next hour
+                # cur_datetime = batch_predictedtimes + pd.Timedelta(hours=predicted_hour)
+                # Compute the time related columns
+                # new_time_related_columns = np.zeros((x_pollution_data.shape[0], len(time_related_columns)))
+                # x_pollution_data[:, 0, time_related_columns_indices] = time_related_columns
 
             break
             y_pollution_data = target[0][:, predicted_hour, :].to(device)

@@ -284,7 +284,7 @@ if __name__ == '__main__':
     norm_params_file = join(training_folder, f"norm_params_{start_year}_to_{end_year}.pkl")
     pollutants_to_keep = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco']
     # Data loader parameters
-    batch_size = 1
+    batch_size = 8
     prev_pollutant_hours = 24
     prev_weather_hours = 24
     next_weather_hours = 1
@@ -339,7 +339,7 @@ if __name__ == '__main__':
         weather_data = batch[0][1].numpy()[0,:,:,:,:]  # Final shape is (prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)
         target_data = batch[1][0].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
         imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
-        current_datetime = pd.to_datetime(batch[2].item(), unit='s')
+        current_datetime = pd.to_datetime(batch[2][0].item(), unit='s')
 
         # Plot the pollution data
         # Find all indices that contain "otres" in the name
