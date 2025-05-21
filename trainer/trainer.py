@@ -53,7 +53,9 @@ class Trainer(BaseTrainer):
             x_pollution_data, x_weather_data = x_pollution_data.to(self.device), x_weather_data.to(self.device)
             batch_predictedtimes = pd.to_datetime(current_datetime, unit='s')
             
-            # Iterate through each prediction step
+            self.optimizer.zero_grad()
+            total_loss = 0.0
+            cur_x_pollution_data = x_pollution_data.clone()
             for predicted_hour in range(auto_regresive_steps):
                 # Set the current weather window input
                 cur_weather_input = x_weather_data[:, predicted_hour:predicted_hour+weather_window_size, :]
@@ -63,37 +65,34 @@ class Trainer(BaseTrainer):
                 y_mask_data = target[1][:, predicted_hour, :].to(self.device)
                 new_target = (y_pollution_data, y_mask_data)
 
-                # In this case we need to zero the grad before the forward pass because
-                # we are updating the weights of the model for 'each' prediction
-                self.optimizer.zero_grad()
-                output = self.model(cur_weather_input, x_pollution_data)
+                output = self.model(cur_weather_input, cur_x_pollution_data)
                 loss = self.criterion(output, new_target)
-                loss.backward()
-                self.optimizer.step()
-
-                self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
-                self.train_metrics.update('loss', loss.item())
-                for met in self.metric_ftns:
-                    self.train_metrics.update(met.__name__, met(output, new_target))
-
-                if batch_idx % self.log_step == 0:
-                    self.logger.debug('Train Epoch: {} {} Step: {} Loss: {:.6f}'.format(
-                        epoch,
-                        self._progress(batch_idx),
-                        predicted_hour,
-                        loss.item()))
+                total_loss += loss
 
                 # For next iteration, shift pollution data and update with prediction
-                saved_data = x_pollution_data[:, 1:, :].clone()
-                x_pollution_data[:, 0:-1, :] = saved_data
-                x_pollution_data[:, -1, pollution_column_indices] = output
+                next_x_pollution_data = cur_x_pollution_data.clone()
+                next_x_pollution_data[:, 0:-1, :] = cur_x_pollution_data[:, 1:, :].clone()
+                next_x_pollution_data[:, -1, pollution_column_indices] = output
                 # Generate Date columns
-
                 new_date_columns = np.array([generateDateColumns([x], flip_order=True)[1] for x in batch_predictedtimes], dtype=np.float32).squeeze()
-                # I need to validate the order of the columns so lets make all of the 0
-                x_pollution_data[:, -1, time_related_columns_indices] = torch.from_numpy(new_date_columns).to(self.device)
+                next_x_pollution_data[:, -1, time_related_columns_indices] = torch.from_numpy(new_date_columns).to(self.device)
                 batch_predictedtimes = batch_predictedtimes + pd.Timedelta(hours=1)
+                cur_x_pollution_data = next_x_pollution_data
 
+            total_loss.backward()
+            self.optimizer.step()
+
+            self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
+            self.train_metrics.update('loss', loss.item())
+            for met in self.metric_ftns:
+                self.train_metrics.update(met.__name__, met(output, new_target))
+
+            if batch_idx % self.log_step == 0:
+                self.logger.debug('Train Epoch: {} {} Step: {} Loss: {:.6f}'.format(
+                    epoch,
+                    self._progress(batch_idx),
+                    predicted_hour,
+                    loss.item()))
 
             if batch_idx == self.len_epoch:
                 break
