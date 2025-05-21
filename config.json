@@ -74,13 +74,13 @@
         "model_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/saved/models/AirPollutionForecast/0516_205943",
         "data_loader": {
             "years": [2022, 2023],
-            "batch_size": 2,
+            "batch_size": 1024,
             "shuffle": false,
             "validation_split": 0.0,
             "num_workers": 2,
-            "auto_regresive_steps": 24 
+            "auto_regresive_steps": 24
         },
-        "visualize_batch": true,
+        "visualize_batch": false,
         "visualize":{
             "output_folder": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/imgs",
             "weather_var_idx": 0,

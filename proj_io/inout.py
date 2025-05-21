@@ -244,16 +244,20 @@ def filterDatesWithMeteorologicalData(datetimes, forecasted_hours, num_hours_in_
 
     return not_meteo_idxs
 
-def generateDateColumns(datetimes):
-    time_cols = [ 'half_sin_day', 'half_cos_day', 'half_sin_week', 'half_cos_week', 'half_sin_year', 
-                 'half_cos_year', 'sin_day', 'cos_day', 'sin_week', 'cos_week', 'sin_year', 'cos_year']
+def generateDateColumns(datetimes, flip_order=False):
+    time_cols = [ 'half_sin_day', 'half_cos_day', 'half_sin_week', 'half_cos_week', 'half_sin_year', 'half_cos_year', 
+                 'sin_day', 'cos_day', 'sin_week', 'cos_week', 'sin_year', 'cos_year']
     # Incorporate dates into the merged dataset sin and cosines
     day = 24 * 60 * 60
     week = day * 7
     year = (365.2425) * day
 
     two_pi = 2 * np.pi
-    options = [day, week, year]
+    # TODO super patch here. FOr some reason the CSV do not align with the dataloader
+    if flip_order:
+        options = [day, year, week]
+    else:
+        options = [day, week, year]
 
     time_values = []
     # Get the sin and cos for each of the options for half the day

@@ -217,7 +217,7 @@ def visualize_pollution_input( pollution_data: np.ndarray,
     fig, axs = plt.subplots(figsize=(15, 8))
     axs.plot(pollution_data[0, :, time_related_indices].T)
     axs.set_title(f'Time Related Columns')
-    axs.legend(time_related_columns)
+    axs.legend([f'{i}_{x}' for i, x in enumerate(time_related_columns)])
     plt.tight_layout()
     plt.savefig(join(output_folder, f'{predicted_hour}_{contaminant_name}_time_related_columns_plot.png'))
     plt.close(fig)

@@ -3,7 +3,8 @@ import torch
 from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
-
+import pandas as pd
+from proj_io.inout import generateDateColumns
 
 class Trainer(BaseTrainer):
     """
@@ -42,35 +43,61 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         auto_regresive_steps = self.config['trainer']['auto_regresive_steps']
-        auto_regresive_idx = 0
+        weather_window_size = self.config['data_loader']['args']['prev_weather_hours'] + self.config['data_loader']['args']['next_weather_hours'] + 1
+
+        time_related_columns, time_related_columns_indices = self.data_loader.get_pollution_column_names_and_indices("time")
+        pollution_column_names, pollution_column_indices = self.data_loader.get_pollution_column_names_and_indices("pollutant_only")
+
         for batch_idx, (data, target, current_datetime) in enumerate(self.data_loader):
             x_pollution_data, x_weather_data = data
             x_pollution_data, x_weather_data = x_pollution_data.to(self.device), x_weather_data.to(self.device)
+            batch_predictedtimes = pd.to_datetime(current_datetime, unit='s')
+            
+            # Iterate through each prediction step
+            for predicted_hour in range(auto_regresive_steps):
+                # Set the current weather window input
+                cur_weather_input = x_weather_data[:, predicted_hour:predicted_hour+weather_window_size, :]
+                
+                # Get target for current step
+                y_pollution_data = target[0][:, predicted_hour, :].to(self.device)
+                y_mask_data = target[1][:, predicted_hour, :].to(self.device)
+                new_target = (y_pollution_data, y_mask_data)
 
-            y_pollution_data = target[0][:, auto_regresive_idx, :].to(self.device)
-            y_mask_data = target[1][:, auto_regresive_idx, :].to(self.device) 
-            new_target = (y_pollution_data, y_mask_data)
+                # In this case we need to zero the grad before the forward pass because
+                # we are updating the weights of the model for 'each' prediction
+                self.optimizer.zero_grad()
+                output = self.model(cur_weather_input, x_pollution_data)
+                loss = self.criterion(output, new_target)
+                loss.backward()
+                self.optimizer.step()
 
-            self.optimizer.zero_grad()
-            output = self.model(x_weather_data, x_pollution_data)
-            loss = self.criterion(output, new_target)
-            loss.backward()
-            self.optimizer.step()
+                self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
+                self.train_metrics.update('loss', loss.item())
+                for met in self.metric_ftns:
+                    self.train_metrics.update(met.__name__, met(output, new_target))
 
-            self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
-            self.train_metrics.update('loss', loss.item())
-            for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, new_target))
+                if batch_idx % self.log_step == 0:
+                    self.logger.debug('Train Epoch: {} {} Step: {} Loss: {:.6f}'.format(
+                        epoch,
+                        self._progress(batch_idx),
+                        predicted_hour,
+                        loss.item()))
 
-            if batch_idx % self.log_step == 0:
-                self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
-                    epoch,
-                    self._progress(batch_idx),
-                    loss.item()))
-                # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                # For next iteration, shift pollution data and update with prediction
+                saved_data = x_pollution_data[:, 1:, :].clone()
+                x_pollution_data[:, 0:-1, :] = saved_data
+                x_pollution_data[:, -1, pollution_column_indices] = output
+                # Generate Date columns
+
+                new_date_columns = np.array([generateDateColumns([x], flip_order=True)[1] for x in batch_predictedtimes], dtype=np.float32).squeeze()
+                # I need to validate the order of the columns so lets make all of the 0
+                x_pollution_data[:, -1, time_related_columns_indices] = torch.from_numpy(new_date_columns).to(self.device)
+                batch_predictedtimes = batch_predictedtimes + pd.Timedelta(hours=1)
+
 
             if batch_idx == self.len_epoch:
                 break
+
         log = self.train_metrics.result()
 
         if self.do_validation:
@@ -95,7 +122,6 @@ class Trainer(BaseTrainer):
         """
         self.model.eval()
         self.valid_metrics.reset()
-        auto_regresive_steps = self.config['trainer']['auto_regresive_steps']
         auto_regresive_idx = 0
         with torch.no_grad():
             for batch_idx, (data, target, current_datetime) in enumerate(self.valid_data_loader):
@@ -111,8 +137,8 @@ class Trainer(BaseTrainer):
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
-                for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, new_target))
+                # for met in self.metric_ftns:
+                    # self.valid_metrics.update(met.__name__, met(output, new_target))
                 # self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         # add histogram of model parameters to the tensorboard

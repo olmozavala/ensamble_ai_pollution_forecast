@@ -45,7 +45,7 @@ def main(config):
     model.eval()
 
     total_loss = 0.0
-    total_metrics = torch.zeros(len(metric_fns))
+    total_metrics = torch.zeros(len(metric_fns)).to(device)
 
     total_predicted_hours = config['test']['data_loader']['auto_regresive_steps'] # 0 Is the 'next' hour, 1 is the 'next next' hour, etc.
     weather_window_size = config['data_loader']['args']['prev_weather_hours'] + config['data_loader']['args']['next_weather_hours'] + 1
@@ -127,21 +127,26 @@ def main(config):
                 x_pollution_data[:, -1, pollution_column_indices] = output
 
                 # Generate Date columns
-                batch_predictedtimes = batch_predictedtimes + pd.Timedelta(hours=1)
-                new_date_columns = np.array([generateDateColumns([x])[1] for x in batch_predictedtimes], dtype=np.float32).squeeze()
+                new_date_columns = np.array([generateDateColumns([x], flip_order=True)[1] for x in batch_predictedtimes], dtype=np.float32).squeeze()
+                # I need to validate the order of the columns so lets make all of the 0
                 x_pollution_data[:, -1, time_related_columns_indices] = torch.from_numpy(new_date_columns).to(device)
+                batch_predictedtimes = batch_predictedtimes + pd.Timedelta(hours=1)
 
-            break
-            y_pollution_data = target[0][:, predicted_hour, :].to(device)
-            y_mask_data = target[1][:, predicted_hour, :].to(device) 
+            # Here we need to decide if we should compute the loss for all the predicted hours or just the last one
+            y_pollution_data = target[:, predicted_hour, :].to(device)
+            y_mask_data = target[:, predicted_hour, :].to(device) 
             new_target = (y_pollution_data, y_mask_data)
 
-            # # computing loss, metrics on test set
-            # loss = loss_fn(output, target)
-            # batch_size = data.shape[0]
-            # total_loss += loss.item() * batch_size
+            # computing loss, metrics on test set
+            loss = loss_fn(output, new_target)
+            batch_size = data_loader.batch_size
+            total_loss += loss.item() * batch_size
             # for i, metric in enumerate(metric_fns):
-            #     total_metrics[i] += metric(output, target) * batch_size
+                # total_metrics[i] += metric(output, new_target) * batch_size
+
+            # Print the loss and metrics for the current batch
+            print(f"Batch {batch_idx} loss: {loss.item()/batch_size:.6f}")
+            # print(f"Batch {batch_idx} metrics: {total_metrics/batch_size}")
 
     n_samples = len(data_loader.sampler)
     log = {'loss': total_loss / n_samples}
