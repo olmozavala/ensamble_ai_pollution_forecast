@@ -64,7 +64,9 @@ class MultiStreamTransformerModel(BaseModel):
                  output_size: int,
                  lat_size: int,
                  lon_size: int,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1,
+                 weather_transformer_blocks: int = 2,
+                 pollution_transformer_blocks: int = 2):
         super().__init__()
 
         print("Buidling MultiStreamTransformerModel...")
@@ -76,6 +78,8 @@ class MultiStreamTransformerModel(BaseModel):
         print(f"pollution_embedding_size: {pollution_embedding_size}")
         print(f"attention_heads: {attention_heads}")
         print(f"output_size: {output_size}")
+        print(f"weather_transformer_blocks: {weather_transformer_blocks}")
+        print(f"pollution_transformer_blocks: {pollution_transformer_blocks}")
 
         self.weather_time_dims = weather_time_dims
         self.pollution_time_dims = pollution_time_dims
@@ -86,8 +90,12 @@ class MultiStreamTransformerModel(BaseModel):
             for _ in range(weather_fields)
         ])
         
+        # Create multiple transformer blocks for each weather field
         self.weather_transformers = nn.ModuleList([
-            TransformerEncoder(weather_embedding_size, attention_heads, dropout)
+            nn.ModuleList([
+                TransformerEncoder(weather_embedding_size, attention_heads, dropout)
+                for _ in range(weather_transformer_blocks)
+            ])
             for _ in range(weather_fields)
         ])
         
@@ -96,9 +104,11 @@ class MultiStreamTransformerModel(BaseModel):
         self.pollution_pos_encoding = nn.Parameter(
             torch.randn(pollution_time_dims, pollution_embedding_size)
         )
-        self.pollution_transformer = TransformerEncoder(
-            pollution_embedding_size, attention_heads, dropout
-        )
+        # Create multiple transformer blocks for pollution
+        self.pollution_transformers = nn.ModuleList([
+            TransformerEncoder(pollution_embedding_size, attention_heads, dropout)
+            for _ in range(pollution_transformer_blocks)
+        ])
         
         # Merge layers
         merged_size = weather_embedding_size * weather_fields + pollution_embedding_size
@@ -156,10 +166,12 @@ class MultiStreamTransformerModel(BaseModel):
             # Create patches and embed
             embedded = self.weather_patch_embeddings[field](field_data)
             
-            # Apply transformer
-            transformed = self.weather_transformers[field](embedded)
+            # Apply chained transformers
+            transformed = embedded
+            for transformer in self.weather_transformers[field]:
+                transformed = transformer(transformed)
             
-            # Pool across time dimension (you could use different pooling strategies)
+            # Pool across time dimension
             pooled = transformed.mean(dim=1)  # (batch, embedding_size)
             
             weather_outputs.append(pooled)
@@ -170,8 +182,13 @@ class MultiStreamTransformerModel(BaseModel):
         # Process pollution data
         pollution_embedded = self.pollution_embedding(pollution_data)
         pollution_embedded = pollution_embedded + self.pollution_pos_encoding
-        pollution_transformed = self.pollution_transformer(pollution_embedded)
-        pollution_pooled = pollution_transformed.mean(dim=1)
+        
+        # Apply chained transformers
+        transformed = pollution_embedded
+        for transformer in self.pollution_transformers:
+            transformed = transformer(transformed)
+        
+        pollution_pooled = transformed.mean(dim=1)
         
         # Merge weather and pollution branches
         merged = torch.cat([weather_combined, pollution_pooled], dim=1)

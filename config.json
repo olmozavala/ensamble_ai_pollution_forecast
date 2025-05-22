@@ -1,11 +1,11 @@
 {
-    "name": "AirPollutionForecast",
+    "name": "AirPollutionForecast_Delete",
     "n_gpu": 1,
 
     "arch": {
         "type": "MultiStreamTransformerModel",
         "args": {
-            "weather_time_dims": 3,
+            "weather_time_dims": 24,
             "pollution_time_dims": 24,
             "weather_fields": 8,
             "pollution_features": 146,
@@ -15,7 +15,9 @@
             "output_size": 134,
             "lat_size": 25,
             "lon_size": 25,
-            "dropout": 0.1
+            "dropout": 0.1,
+            "weather_transformer_blocks": 3,
+            "pollution_transformer_blocks": 3
         }
     },
     "data_loader": {
@@ -29,8 +31,8 @@
             "prev_pollutant_hours": 24,
             "prev_weather_hours": 1,
             "next_weather_hours": 1,
-            "auto_regresive_steps": 3,
-            "batch_size": 1024,
+            "auto_regresive_steps": 24,
+            "batch_size": 512,
             "shuffle": true,
             "validation_split": 0.2,
             "num_workers": 4
@@ -44,7 +46,7 @@
             "amsgrad": true
         }
     },
-    "loss": "masked_mse_loss",
+    "loss": "asymmetric_weighted_mse_loss",
     "metrics": ["masked_mse_loss"],
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
@@ -71,16 +73,16 @@
         "auto_regresive_steps": 3
     },
     "test": {
-        "model_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/saved/models/AirPollutionForecast/0516_205943",
+        "model_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/models/AirPollutionForecast/0521_131625",
+        "visualize_batch": true,
         "data_loader": {
             "years": [2022, 2023],
-            "batch_size": 1024,
+            "batch_size": 2,
             "shuffle": false,
             "validation_split": 0.0,
             "num_workers": 2,
             "auto_regresive_steps": 24
         },
-        "visualize_batch": false,
         "visualize":{
             "output_folder": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/imgs",
             "weather_var_idx": 0,

@@ -79,6 +79,10 @@ class Trainer(BaseTrainer):
                 batch_predictedtimes = batch_predictedtimes + pd.Timedelta(hours=1)
                 cur_x_pollution_data = next_x_pollution_data
 
+            # If batch_idx is 0 then add the computational graph to the tensorboard
+            if batch_idx == 0:
+                self.writer.add_graph(self.model, (cur_weather_input, cur_x_pollution_data))
+
             total_loss.backward()
             self.optimizer.step()
 

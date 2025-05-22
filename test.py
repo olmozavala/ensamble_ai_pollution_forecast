@@ -147,6 +147,7 @@ def main(config):
             # Print the loss and metrics for the current batch
             print(f"Batch {batch_idx} loss: {loss.item()/batch_size:.6f}")
             # print(f"Batch {batch_idx} metrics: {total_metrics/batch_size}")
+            break
 
     n_samples = len(data_loader.sampler)
     log = {'loss': total_loss / n_samples}
