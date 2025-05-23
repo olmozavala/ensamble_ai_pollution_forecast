@@ -1,5 +1,5 @@
 {
-    "name": "AirPollutionForecastNewLossLargeWeightFiveTotalWeather",
+    "name": "AirPollutionForecastNewLossLargeWeightFiveTotalWeatherTenAutoRegresiveSteps",
     "n_gpu": 1,
 
     "arch": {
@@ -31,7 +31,7 @@
             "prev_pollutant_hours": 24,
             "prev_weather_hours": 5,
             "next_weather_hours": 2,
-            "auto_regresive_steps": 4,
+            "auto_regresive_steps": 10,
             "batch_size": 256,
             "shuffle": true,
             "validation_split": 0.2,
@@ -86,7 +86,7 @@
         "visualize":{
             "output_folder": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/imgs",
             "weather_var_idx": 0,
-            "contaminant_name": "otres",
+            "contaminant_name": "pmdiez",
             "weather_var_name": "T2"
         }
     }

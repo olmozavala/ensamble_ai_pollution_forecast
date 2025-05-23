@@ -119,7 +119,8 @@ def main(config):
                                               next_weather_hours,
                                               auto_regresive_steps,
                                               weather_var_idx,
-                                              weather_var_name)
+                                              weather_var_name,
+                                              batch_idx)
 
                 # Shift the pollution data and time related columns forward by 1 hour (dropping last hour)
                 saved_data = x_pollution_data[:, 1:, :].clone()  # If I don't clone, the data is overwritten and it doesn't look right
@@ -147,7 +148,9 @@ def main(config):
             # Print the loss and metrics for the current batch
             print(f"Batch {batch_idx} loss: {loss.item()/batch_size:.6f}")
             # print(f"Batch {batch_idx} metrics: {total_metrics/batch_size}")
-            break
+
+            if batch_idx > 10:
+                break
 
     n_samples = len(data_loader.sampler)
     log = {'loss': total_loss / n_samples}

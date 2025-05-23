@@ -179,7 +179,8 @@ def visualize_pollution_input( pollution_data: np.ndarray,
                                next_weather_hours: int,
                                auto_regresive_steps: int,
                                weather_var_idx: int,
-                               weather_var_name: str
+                               weather_var_name: str,
+                               batch_idx: str = ""
                                ) -> None:
     """
     Visualize pollution input data.
@@ -206,18 +207,18 @@ def visualize_pollution_input( pollution_data: np.ndarray,
     # Include the average of the weather data
     axs.scatter(weather_hours, weather_data[0, :, weather_var_idx, :, :].mean(axis=(1,2)), color='black', label=weather_var_name, s=100)
 
-    axs.set_title('Pollution Data - Otres')
+    axs.set_title(f'Pollution Data - {contaminant_name}')
     axs.set_xlabel('Hour')
     axs.legend([pollution_column_names[i] for i in plot_pollutant_indices])
     plt.tight_layout()
-    plt.savefig(join(output_folder, f'{predicted_hour}_{contaminant_name}_pollution_only_data_plot.png'))
+    plt.savefig(join(output_folder, f'{predicted_hour}_{batch_idx}_{contaminant_name}_pollution_only_data_plot.png'))
     plt.close(fig)
 
     # In a new figure plot the time related columns
-    fig, axs = plt.subplots(figsize=(15, 8))
-    axs.plot(pollution_data[0, :, time_related_indices].T)
-    axs.set_title(f'Time Related Columns')
-    axs.legend([f'{i}_{x}' for i, x in enumerate(time_related_columns)])
-    plt.tight_layout()
-    plt.savefig(join(output_folder, f'{predicted_hour}_{contaminant_name}_time_related_columns_plot.png'))
-    plt.close(fig)
+    # fig, axs = plt.subplots(figsize=(15, 8))
+    # axs.plot(pollution_data[0, :, time_related_indices].T)
+    # axs.set_title(f'Time Related Columns')
+    # axs.legend([f'{i}_{x}' for i, x in enumerate(time_related_columns)])
+    # plt.tight_layout()
+    # plt.savefig(join(output_folder, f'{predicted_hour}_{batch_idx}_{contaminant_name}_time_related_columns_plot.png'))
+    # plt.close(fig)
