@@ -155,14 +155,14 @@ def visualize_batch_data( pollution_data: np.ndarray,
     plt.close(fig)
 
     # Third plot,  the time related columns
-    fig, axs = plt.subplots(figsize=(15, 8))
-    # Time related columns are all the ones that are not pollutants
-    axs.plot(pollution_data[:, time_related_indices])
-    axs.set_title(f'Pollution Data - {contaminant_name} - {current_datetime.strftime("%Y-%m-%d %H:%M")}')
-    axs.legend(time_related_columns)
-    plt.tight_layout()
-    plt.savefig(join(output_folder, f'{batch_idx}_{contaminant_name}_time_related_columns_plot.png'))
-    plt.close(fig)
+    # fig, axs = plt.subplots(figsize=(15, 8))
+    # # Time related columns are all the ones that are not pollutants
+    # axs.plot(pollution_data[:, time_related_indices])
+    # axs.set_title(f'Pollution Data - {contaminant_name} - {current_datetime.strftime("%Y-%m-%d %H:%M")}')
+    # axs.legend(time_related_columns)
+    # plt.tight_layout()
+    # plt.savefig(join(output_folder, f'{batch_idx}_{contaminant_name}_time_related_columns_plot.png'))
+    # plt.close(fig)
 
 def visualize_pollution_input( pollution_data: np.ndarray,
                                weather_data: np.ndarray,
@@ -211,7 +211,7 @@ def visualize_pollution_input( pollution_data: np.ndarray,
     axs.set_xlabel('Hour')
     axs.legend([pollution_column_names[i] for i in plot_pollutant_indices])
     plt.tight_layout()
-    plt.savefig(join(output_folder, f'{predicted_hour}_{batch_idx}_{contaminant_name}_pollution_only_data_plot.png'))
+    plt.savefig(join(output_folder, f'{batch_idx}_{predicted_hour}_{contaminant_name}_pollution_only_data_plot.png'))
     plt.close(fig)
 
     # In a new figure plot the time related columns
