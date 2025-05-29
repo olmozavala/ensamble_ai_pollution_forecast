@@ -32,8 +32,8 @@ class BaseDataLoader(DataLoader):
 
         idx_full = np.arange(self.n_samples)
 
-        np.random.seed(0)
-        np.random.shuffle(idx_full)
+        # np.random.seed(0)
+        # np.random.shuffle(idx_full)
 
         if isinstance(split, int):
             assert split > 0
@@ -42,19 +42,21 @@ class BaseDataLoader(DataLoader):
         else:
             len_valid = int(self.n_samples * split)
 
-        valid_idx = idx_full[0:len_valid]
-        train_idx = np.delete(idx_full, np.arange(0, len_valid))
+        valid_idx = idx_full[-len_valid:]
+        train_idx = np.delete(idx_full, np.arange(self.n_samples-len_valid, self.n_samples))
 
         train_sampler = SubsetRandomSampler(train_idx)
         valid_sampler = SubsetRandomSampler(valid_idx)
 
         # turn off shuffle option which is mutually exclusive with sampler
-        self.shuffle = False
+        self.shuffle = False  # Not sure why this is needed 
         self.n_samples = len(train_idx)
 
         return train_sampler, valid_sampler
 
-    def split_validation(self):
+    def split_validation(self, batch_size=None):
+        if batch_size is not None:
+            self.init_kwargs['batch_size'] = batch_size
         if self.valid_sampler is None:
             return None
         else:

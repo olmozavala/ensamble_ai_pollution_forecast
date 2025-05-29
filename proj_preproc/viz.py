@@ -201,8 +201,15 @@ def visualize_pollution_input( pollution_data: np.ndarray,
     # Plot each pollutant with a consistent color
     for idx, pollutant_idx in enumerate(plot_pollutant_indices):
         color = colors[idx % len(colors)]  # Cycle through colors if more pollutants than colors
+        # Plot the input data
         axs.plot(input_hours, pollution_data[0, :, pollutant_idx], color=color)
+        # Plot the target data
         axs.scatter(target_hours, target_data[0, :, pollutant_idx], color=color, label='Target')
+
+    # Plot the average value of input data with a + for all pollutants_indices
+    axs.scatter(input_hours, pollution_data[0, :, plot_pollutant_indices].mean(axis=0), color='red', marker='*', s=200, label='Input Average')
+    # Plot the average value of target data with a x
+    axs.scatter(target_hours, target_data[0, :, plot_pollutant_indices].mean(axis=0), color='blue', marker='*', s=200, label='Target Average')
 
     # Include the average of the weather data
     axs.scatter(weather_hours, weather_data[0, :, weather_var_idx, :, :].mean(axis=(1,2)), color='black', label=weather_var_name, s=100)

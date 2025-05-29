@@ -37,9 +37,14 @@ config = ConfigParser.from_args(args, options)
 # %%
 logger = config.get_logger('train')
 
-# setup data_loader instances
-data_loader = config.init_obj('data_loader', module_data)
-valid_data_loader = data_loader.split_validation()
+# Log the batch_size, the auto_regressive_steps, the learning rate, the metrics, the loss function, the optimizer, the lr_scheduler, the model, the device, the data_loader, the valid_data_loader, the trainer
+logger.info(f"Batch Size: {config['data_loader']['args']['batch_size']}")
+logger.info(f"AutoRegressiveSteps: {config['trainer']['auto_regresive_steps']}")
+logger.info(f"Learning Rate: {config['optimizer']['args']['lr']}")
+logger.info(f"Metrics: {config['metrics']}")
+logger.info(f"Loss Function: {config['loss']}")
+logger.info(f"Optimizer: {config['optimizer']['type']}")
+logger.info(f"LR Scheduler: {config['lr_scheduler']['type']}")
 
 # build model architecture, then print to console
 model = config.init_obj('arch', module_arch)
@@ -64,8 +69,6 @@ lr_scheduler = config.init_obj('lr_scheduler', torch.optim.lr_scheduler, optimiz
 trainer = Trainer(model, criterion, metrics, optimizer,
                     config=config,
                     device=device,
-                    data_loader=data_loader,
-                    valid_data_loader=valid_data_loader,
                     lr_scheduler=lr_scheduler)
 
 trainer.train()

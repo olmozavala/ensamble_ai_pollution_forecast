@@ -48,7 +48,6 @@ def asymmetric_weighted_mse_loss(output, target):
     return torch.mean(squared_diff)
 
 
-
 def huber_loss(output, target, delta=1.0):
     """Huber loss - combines benefits of MSE and MAE."""
     return F.huber_loss(output, target, delta=delta)

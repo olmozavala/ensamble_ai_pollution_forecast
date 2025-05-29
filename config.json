@@ -1,5 +1,5 @@
 {
-    "name": "AirPollutionForecastNewLossLargeWeightFiveTotalWeatherTwentyFourAutoRegresiveSteps",
+    "name": "AirPollutionForecastEightTotalWeatherStartWithOneAutoRegresiveStep",
     "n_gpu": 1,
 
     "arch": {
@@ -32,22 +32,34 @@
             "prev_weather_hours": 5,
             "next_weather_hours": 2,
             "auto_regresive_steps": 8,
-            "batch_size": 128,
+            "batch_size": 896,
             "shuffle": true,
-            "validation_split": 0.2,
+            "validation_split": 0.1,
             "num_workers": 4
         }
+    },
+    "trainer": {
+        "epochs": 3000,
+        "save_dir": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/",
+        "save_period": 1,
+        "verbosity": 2,
+        "monitor": "min val_loss",
+        "early_stop": 20,
+        "tensorboard": true,
+        "log_dir": "saved/runs",
+        "auto_regresive_steps": 8,
+        "epochs_before_increase_auto_regresive_steps": 4
     },
     "optimizer": {
         "type": "Adam",
         "args":{
-            "lr": 0.001,
+            "lr": 0.0001,
             "weight_decay": 1e-5,
             "amsgrad": true
         }
     },
     "loss": "asymmetric_weighted_mse_loss",
-    "metrics": ["masked_mse_loss"],
+    "metrics": ["masked_rmse_metric"],
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
         "args": {
@@ -60,17 +72,6 @@
             "min_lr": 1e-8,
             "eps": 1e-8
         }
-    },
-    "trainer": {
-        "epochs": 3000,
-        "save_dir": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/",
-        "save_period": 1,
-        "verbosity": 2,
-        "monitor": "min val_loss",
-        "early_stop": 20,
-        "tensorboard": true,
-        "log_dir": "saved/runs",
-        "auto_regresive_steps": 8
     },
     "test": {
         "model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/models/AirPollutionForecastNewLossLargeWeightFiveTotalWeatherTwentyFourAutoRegresiveSteps/0523_161128",
@@ -86,7 +87,7 @@
         "visualize":{
             "output_folder": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/imgs",
             "weather_var_idx": 0,
-            "contaminant_name": "otres",
+            "contaminant_name": "pmdoscinco",
             "weather_var_name": "T2"
         }
     }
