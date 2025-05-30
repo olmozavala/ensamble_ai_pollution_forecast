@@ -1,23 +1,23 @@
 {
-    "name": "AirPollutionForecastEightTotalWeatherStartWithOneAutoRegresiveStep",
+    "name": "AirPollutionForecastNewModelWithouthTimeAverageLessAtentionHeadsMoreBlocksMoreAutoRegresive",
     "n_gpu": 1,
 
     "arch": {
         "type": "MultiStreamTransformerModel",
         "args": {
-            "weather_time_dims": 8,
+            "weather_time_dims": 4,
             "pollution_time_dims": 8,
             "weather_fields": 8,
             "pollution_features": 146,
-            "weather_embedding_size": 512,
+            "weather_embedding_size": 128,
             "pollution_embedding_size": 128,
-            "attention_heads": 4,
+            "attention_heads": 2,
             "output_size": 134,
             "lat_size": 25,
             "lon_size": 25,
             "dropout": 0.1,
-            "weather_transformer_blocks": 3,
-            "pollution_transformer_blocks": 3
+            "weather_transformer_blocks": 5,
+            "pollution_transformer_blocks": 5
         }
     },
     "data_loader": {
@@ -29,10 +29,10 @@
             "years": [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020],
             "pollutants_to_keep": ["co", "nodos", "otres", "pmdiez", "pmdoscinco"],
             "prev_pollutant_hours": 8,
-            "prev_weather_hours": 5,
-            "next_weather_hours": 2,
+            "prev_weather_hours": 2,
+            "next_weather_hours": 1,
             "auto_regresive_steps": 8,
-            "batch_size": 896,
+            "batch_size": 1536,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 4
@@ -48,7 +48,7 @@
         "tensorboard": true,
         "log_dir": "saved/runs",
         "auto_regresive_steps": 8,
-        "epochs_before_increase_auto_regresive_steps": 4
+        "epochs_before_increase_auto_regresive_steps": 8
     },
     "optimizer": {
         "type": "Adam",

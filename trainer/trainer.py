@@ -155,6 +155,11 @@ class Trainer(BaseTrainer):
         time_related_columns, time_related_columns_indices = self.data_loader.get_pollution_column_names_and_indices("time")
         pollution_column_names, pollution_column_indices = self.data_loader.get_pollution_column_names_and_indices("pollutant_only")
 
+        # Initialize accumulators for epoch-level metrics
+        epoch_loss = 0.0
+        epoch_metrics = {met.__name__: 0.0 for met in self.metric_ftns}
+        num_batches = 0
+
         with torch.no_grad():
             for batch_idx, (data, target, current_datetime) in enumerate(self.valid_data_loader):
                 x_pollution_data, x_weather_data = data
@@ -187,11 +192,26 @@ class Trainer(BaseTrainer):
                     batch_predictedtimes = batch_predictedtimes + pd.Timedelta(hours=1)
                     cur_x_pollution_data = next_x_pollution_data
 
+                    # TODO we need to validate that the inputs are correct for the validation
+
                 total_loss = total_loss / (predicted_hour + 1)  # Divide by number of predicted hours
-                self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
-                self.valid_metrics.update('loss', total_loss.item())
+                
+                # Accumulate metrics
+                epoch_loss += total_loss.item()
                 for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, new_target))
+                    epoch_metrics[met.__name__] += met(output, new_target)
+                num_batches += 1
+
+        # Average metrics across all batches
+        epoch_loss /= num_batches
+        for met_name in epoch_metrics:
+            epoch_metrics[met_name] /= num_batches
+
+        # Update metrics for logging
+        self.writer.set_step(epoch, 'valid')
+        self.valid_metrics.update('loss', epoch_loss)
+        for met_name, value in epoch_metrics.items():
+            self.valid_metrics.update(met_name, value)
 
         return self.valid_metrics.result()
 

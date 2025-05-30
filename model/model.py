@@ -111,19 +111,24 @@ class MultiStreamTransformerModel(BaseModel):
         ])
         
         # Merge layers
-        merged_size = weather_embedding_size * weather_fields + pollution_embedding_size
+        # Calculate sizes based on the model configuration
+        weather_merged_size = weather_embedding_size * weather_time_dims * weather_fields
+        pollution_merged_size = pollution_embedding_size * pollution_time_dims
+        merged_size = weather_merged_size + pollution_merged_size
+        
+        print(f"Initializing decoder with input size: {merged_size}")
         
         # Decoder (feed forward networks)
         self.decoder = nn.Sequential(
-            nn.Linear(merged_size, merged_size // 2),
-            nn.BatchNorm1d(merged_size // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(merged_size // 2, merged_size // 4),
+            nn.Linear(merged_size, merged_size // 4),  # Reduced first layer size
             nn.BatchNorm1d(merged_size // 4),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(merged_size // 4, output_size)
+            nn.Linear(merged_size // 4, merged_size // 8),
+            nn.BatchNorm1d(merged_size // 8),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(merged_size // 8, output_size)
         )
 
     def forward(self, weather_data, pollution_data):
@@ -171,10 +176,14 @@ class MultiStreamTransformerModel(BaseModel):
             for transformer in self.weather_transformers[field]:
                 transformed = transformer(transformed)
             
-            # Pool across time dimension
-            pooled = transformed.mean(dim=1)  # (batch, embedding_size)
+            # Concatenate across time dimension instead of pooling
+            # Reshape to combine batch and time dimensions
+            batch_size = transformed.size(0)
+            time_steps = transformed.size(1)
+            embedding_size = transformed.size(2)
+            concatenated = transformed.reshape(batch_size, time_steps * embedding_size)  # (batch, time*embedding_size)
             
-            weather_outputs.append(pooled)
+            weather_outputs.append(concatenated)
         
         # Combine all weather field outputs
         weather_combined = torch.cat(weather_outputs, dim=1)
@@ -188,10 +197,19 @@ class MultiStreamTransformerModel(BaseModel):
         for transformer in self.pollution_transformers:
             transformed = transformer(transformed)
         
-        pollution_pooled = transformed.mean(dim=1)
+        # Concatenate pollution time dimensions
+        batch_size = transformed.size(0)
+        time_steps = transformed.size(1)
+        embedding_size = transformed.size(2)
+        pollution_concatenated = transformed.reshape(batch_size, time_steps * embedding_size)
         
         # Merge weather and pollution branches
-        merged = torch.cat([weather_combined, pollution_pooled], dim=1)
+        merged = torch.cat([weather_combined, pollution_concatenated], dim=1)
+        
+        # Debug prints
+        # print(f"Weather combined shape: {weather_combined.shape}")
+        # print(f"Pollution concatenated shape: {pollution_concatenated.shape}")
+        # print(f"Merged shape: {merged.shape}")
         
         # Decode to final output
         output = self.decoder(merged)
