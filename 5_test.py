@@ -11,6 +11,7 @@ import model.model as module_arch
 from parse_config import ConfigParser
 from proj_preproc.viz import visualize_batch_data, visualize_pollution_input
 from proj_io.inout import generateDateColumns
+from proj_preproc.normalization import denormalize_data
 from os.path import join
 import os
 
@@ -50,10 +51,17 @@ def main(config):
     total_predicted_hours = config['test']['data_loader']['auto_regresive_steps'] # 0 Is the 'next' hour, 1 is the 'next next' hour, etc.
     weather_window_size = config['data_loader']['args']['prev_weather_hours'] + config['data_loader']['args']['next_weather_hours'] + 1
     
+    model_name = config['name']
+    model_run = config['test']['model_path'].split('/')[-1]
     output_imgs_dir = config['test']['visualize']['output_folder']
-    # Create outptu dir if it doesnt' exist
+    prediction_path = join(config['test']['prediction_path'], model_name, model_run)
+    denormalization_file = config['test']['denormalization_file']
+    
+    # Create output dirs if they don't exist
     if not os.path.exists(output_imgs_dir):
         os.makedirs(output_imgs_dir)
+    if not os.path.exists(prediction_path):
+        os.makedirs(prediction_path)
 
     pollution_column_names, pollution_column_indices = data_loader.get_pollution_column_names_and_indices("pollutant_only")
     imputed_mask_columns, imputed_mask_columns_indices = data_loader.get_pollution_column_names_and_indices("imputed_mask")
@@ -69,8 +77,16 @@ def main(config):
     # Find all indices that contain the pollutant name
     plot_pollutant_indices = [i for i, name in enumerate(pollution_column_names) if contaminant_name in name]
 
+    # Initialize lists to store predictions and targets for each hour
+    all_predictions = [[] for _ in range(total_predicted_hours)]
+    all_targets = [[] for _ in range(total_predicted_hours)]
+    all_timestamps = [[] for _ in range(total_predicted_hours)]
+
     with torch.no_grad():
         for batch_idx, batch in enumerate(tqdm(data_loader)):
+            # Print the current batch and the percentage of the data that has been processed
+            print(f"Batch {batch_idx} of {len(data_loader)}")
+            print(f"  Percentage of data processed: {batch_idx/len(data_loader)*100:.2f}%")
 
             x_pollution_data = batch[0][0].to(device)
             x_weather_data = batch[0][1].to(device)
@@ -104,6 +120,11 @@ def main(config):
 
                 output = model(cur_weather_input, x_pollution_data)
                 predicted_outputs.append(output)
+
+                # Store predictions and targets
+                all_predictions[predicted_hour].append(output.cpu().numpy())
+                all_targets[predicted_hour].append(target[:, predicted_hour, :].cpu().numpy())
+                all_timestamps[predicted_hour].extend(batch_predictedtimes + pd.Timedelta(hours=predicted_hour))
 
                 if config['test']['visualize_batch']:
                     visualize_pollution_input(x_pollution_data.cpu().numpy(), 
@@ -149,8 +170,42 @@ def main(config):
             print(f"Batch {batch_idx} loss: {loss.item()/batch_size:.6f}")
             # print(f"Batch {batch_idx} metrics: {total_metrics/batch_size}")
 
-            if batch_idx > 10:
+            if batch_idx > 3:
                 break
+
+    # Save predictions and targets to CSV files for each predicted hour
+    for hour in range(1, total_predicted_hours+1):
+        # Convert lists to numpy arrays
+        predictions = np.vstack(all_predictions[hour])
+        targets = np.vstack(all_targets[hour])
+        timestamps = pd.Series(all_timestamps[hour])
+
+        # Create DataFrames for predictions and targets
+        pred_df = pd.DataFrame(predictions, columns=pollution_column_names)
+        target_df = pd.DataFrame(targets, columns=pollution_column_names)
+
+        # Denormalize the predictions and targets
+        pred_df, _ = denormalize_data(denormalization_file, pred_df, None)
+        target_df, _ = denormalize_data(denormalization_file, target_df, None)
+
+        # Create final DataFrame with predictions and targets
+        df = pd.DataFrame({
+            'timestamp': timestamps,
+            **{f'pred_{name}': pred_df[name] for name in pollution_column_names},
+            **{f'target_{name}': target_df[name] for name in pollution_column_names}
+        })
+
+        # Sort by timestamp before saving
+        df = df.sort_values(by='timestamp')
+
+        # Save to CSV
+        output_file = join(prediction_path, f'{model_name}_forecast_{hour}.csv')
+        df.to_csv(output_file, index=False)
+        logger.info(f'Saved predictions for hour {hour} to {output_file}')
+
+        # Compute RMSE for the current hour
+        rmse = np.sqrt(np.mean((pred_df.values - target_df.values) ** 2))
+        logger.info(f'RMSE for hour {hour}: {rmse:.6f}')
 
     n_samples = len(data_loader.sampler)
     log = {'loss': total_loss / n_samples}

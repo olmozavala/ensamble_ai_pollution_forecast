@@ -114,7 +114,7 @@ def asymmetric_weighted_mse_metric(output, target):
         diff = output - pollution_data
 
         # Create weights - use 2.0 for under-predictions, 1.0 for over-predictions
-        weights = torch.where(diff < 0, torch.tensor(4.0).to(output.device), torch.tensor(1.0).to(output.device))
+        weights = torch.where(diff < 0, torch.tensor(2.0).to(output.device), torch.tensor(1.0).to(output.device))
         
         # Apply mask and weights
         squared_diff = weights * (diff ** 2) * mask_data

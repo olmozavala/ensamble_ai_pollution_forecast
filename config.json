@@ -1,12 +1,12 @@
 {
-    "name": "AirPollutionForecastNewModelWithouthTimeAverageLessAtentionHeadsMoreBlocksMoreAutoRegresive",
+    "name": "BaseTwoPrevHoursTwoAutoRegresiveStepsFourWeatherFields",
     "n_gpu": 1,
 
     "arch": {
         "type": "MultiStreamTransformerModel",
         "args": {
             "weather_time_dims": 4,
-            "pollution_time_dims": 8,
+            "pollution_time_dims": 2,
             "weather_fields": 8,
             "pollution_features": 146,
             "weather_embedding_size": 128,
@@ -28,10 +28,10 @@
             "training_folder": "/home/olmozavala/DATA/AirPollution/TrainingData",
             "years": [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020],
             "pollutants_to_keep": ["co", "nodos", "otres", "pmdiez", "pmdoscinco"],
-            "prev_pollutant_hours": 8,
+            "prev_pollutant_hours": 2,
             "prev_weather_hours": 2,
             "next_weather_hours": 1,
-            "auto_regresive_steps": 8,
+            "auto_regresive_steps": 2,
             "batch_size": 1536,
             "shuffle": true,
             "validation_split": 0.1,
@@ -47,8 +47,8 @@
         "early_stop": 20,
         "tensorboard": true,
         "log_dir": "saved/runs",
-        "auto_regresive_steps": 8,
-        "epochs_before_increase_auto_regresive_steps": 8
+        "auto_regresive_steps": 2,
+        "epochs_before_increase_auto_regresive_steps": 4
     },
     "optimizer": {
         "type": "Adam",
@@ -74,11 +74,13 @@
         }
     },
     "test": {
-        "model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/models/AirPollutionForecastNewLossLargeWeightFiveTotalWeatherTwentyFourAutoRegresiveSteps/0523_161128",
-        "visualize_batch": true,
+        "model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/models/AirPollutionForecastNewModelWithouthTimeAverageLessAtentionHeadsMoreBlocksMoreAutoRegresive/0529_211810",
+        "visualize_batch": false,
+        "prediction_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/predictions",
+        "denormalization_file": "/home/olmozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
         "data_loader": {
             "years": [2022, 2023],
-            "batch_size": 2,
+            "batch_size": 128,
             "shuffle": false,
             "validation_split": 0.0,
             "num_workers": 2,
@@ -87,8 +89,12 @@
         "visualize":{
             "output_folder": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/imgs",
             "weather_var_idx": 0,
-            "contaminant_name": "pmdoscinco",
+            "contaminant_name": "otres",
             "weather_var_name": "T2"
         }
+    },
+    "analyze": {
+        "prediction_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/predictions",
+        "output_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/analysis"
     }
 }

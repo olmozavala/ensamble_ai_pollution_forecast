@@ -110,28 +110,30 @@ def denormalize_data(norm_params_file: str, pollution_data: DataFrame, weather_d
     with open(norm_params_file, 'rb') as f:
         norm_params = pickle.load(f)
 
-    # Denormalize the data
-    for pollutant in norm_params['pollutants'].keys():
-        print(f"Denormalizing {pollutant}...")
-        # Get the mean and std for the pollutant
-        mean = norm_params['pollutants'][pollutant]['mean']
-        std = norm_params['pollutants'][pollutant]['std']
+    # Denormalize the pollution data if it is not none
+    if pollution_data is not None:
+        for pollutant in norm_params['pollutants'].keys():
+            print(f"Denormalizing {pollutant}...")
+            # Get the mean and std for the pollutant
+            mean = norm_params['pollutants'][pollutant]['mean']
+            std = norm_params['pollutants'][pollutant]['std']
 
-        # Get all the columns that start with the cont_pollutant
-        pol_columns = [col for col in pollution_data.columns if col.startswith(f'cont_{pollutant}')]
-        # print(pol_columns)
+            # Get all the columns that start with the cont_pollutant
+            pol_columns = [col for col in pollution_data.columns if col.startswith(f'cont_{pollutant}')]
+            # print(pol_columns)
 
-        # Denormalize the data
-        pollution_data[pol_columns] = (pollution_data[pol_columns] * std) + mean
+            # Denormalize the data
+            pollution_data[pol_columns] = (pollution_data[pol_columns] * std) + mean
     
     # Denormalize the weather data
-    for weather_var in norm_params['weather'].keys():
-        print(f"Denormalizing {weather_var}...")
-        # Get the mean and std for the weather variable
-        mean = norm_params['weather'][weather_var]['mean']
-        std = norm_params['weather'][weather_var]['std']
+    if weather_data is not None:
+        for weather_var in norm_params['weather'].keys():
+            print(f"Denormalizing {weather_var}...")
+            # Get the mean and std for the weather variable
+            mean = norm_params['weather'][weather_var]['mean']
+            std = norm_params['weather'][weather_var]['std']
 
-        # Denormalize the data
+            # Denormalize the data
         weather_data[weather_var] = (weather_data[weather_var] * std) + mean
     
     return pollution_data, weather_data
