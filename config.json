@@ -1,12 +1,12 @@
 {
-    "name": "BaseTwoPrevHoursTwoAutoRegresiveStepsFourWeatherFields",
+    "name": "FourPrevHoursFourAutoRegresiveStepsFourWeatherFields",
     "n_gpu": 1,
 
     "arch": {
         "type": "MultiStreamTransformerModel",
         "args": {
             "weather_time_dims": 4,
-            "pollution_time_dims": 2,
+            "pollution_time_dims": 4,
             "weather_fields": 8,
             "pollution_features": 146,
             "weather_embedding_size": 128,
@@ -28,10 +28,10 @@
             "training_folder": "/home/olmozavala/DATA/AirPollution/TrainingData",
             "years": [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020],
             "pollutants_to_keep": ["co", "nodos", "otres", "pmdiez", "pmdoscinco"],
-            "prev_pollutant_hours": 2,
+            "prev_pollutant_hours": 4,
             "prev_weather_hours": 2,
             "next_weather_hours": 1,
-            "auto_regresive_steps": 2,
+            "auto_regresive_steps": 4,
             "batch_size": 1536,
             "shuffle": true,
             "validation_split": 0.1,
@@ -47,7 +47,7 @@
         "early_stop": 20,
         "tensorboard": true,
         "log_dir": "saved/runs",
-        "auto_regresive_steps": 2,
+        "auto_regresive_steps": 4,
         "epochs_before_increase_auto_regresive_steps": 4
     },
     "optimizer": {
@@ -74,7 +74,7 @@
         }
     },
     "test": {
-        "model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/models/AirPollutionForecastNewModelWithouthTimeAverageLessAtentionHeadsMoreBlocksMoreAutoRegresive/0529_211810",
+        "model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/models/FourPrevHoursFourAutoRegresiveStepsFourWeatherFields/0602_161115",
         "visualize_batch": false,
         "prediction_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/predictions",
         "denormalization_file": "/home/olmozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
@@ -89,12 +89,12 @@
         "visualize":{
             "output_folder": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/imgs",
             "weather_var_idx": 0,
-            "contaminant_name": "otres",
+            "contaminant_name": "co",
             "weather_var_name": "T2"
         }
     },
     "analyze": {
-        "prediction_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/predictions",
+        "prediction_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/predictions/FourPrevHoursFourAutoRegresiveStepsFourWeatherFields",
         "output_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/analysis"
     }
 }

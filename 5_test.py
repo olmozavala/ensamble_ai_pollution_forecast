@@ -174,7 +174,7 @@ def main(config):
                 break
 
     # Save predictions and targets to CSV files for each predicted hour
-    for hour in range(1, total_predicted_hours+1):
+    for hour in range(0, total_predicted_hours):
         # Convert lists to numpy arrays
         predictions = np.vstack(all_predictions[hour])
         targets = np.vstack(all_targets[hour])
@@ -199,13 +199,13 @@ def main(config):
         df = df.sort_values(by='timestamp')
 
         # Save to CSV
-        output_file = join(prediction_path, f'{model_name}_forecast_{hour}.csv')
+        output_file = join(prediction_path, f'{model_name}_forecast_{hour+1}.csv')
         df.to_csv(output_file, index=False)
-        logger.info(f'Saved predictions for hour {hour} to {output_file}')
+        logger.info(f'Saved predictions for hour {hour+1} to {output_file}')
 
         # Compute RMSE for the current hour
         rmse = np.sqrt(np.mean((pred_df.values - target_df.values) ** 2))
-        logger.info(f'RMSE for hour {hour}: {rmse:.6f}')
+        logger.info(f'RMSE for hour {hour+1}: {rmse:.6f}')
 
     n_samples = len(data_loader.sampler)
     log = {'loss': total_loss / n_samples}
