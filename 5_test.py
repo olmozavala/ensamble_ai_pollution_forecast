@@ -20,6 +20,10 @@ def main(config):
 
     # setup data_loader instances
 
+    # For testing we need to force not to use bootstrap and shuffle should be False
+    config['data_loader']['args']['bootstrap_enabled'] = False
+    config['data_loader']['args']['shuffle'] = False
+
     data_loader = config.init_obj('data_loader', module_data)
 
     # build model architecture
@@ -112,7 +116,6 @@ def main(config):
                              plot_pollutant_indices, pollution_column_names, target_columns, time_related_columns, time_related_columns_indices, weather_var_name, 
                              batch_predictedtimes[0], output_imgs_dir, batch_idx, prev_weather_hours, next_weather_hours, 
                              auto_regresive_steps, weather_var_idx, contaminant_name)
-
 
             predicted_outputs = []
             for predicted_hour in range(total_predicted_hours):

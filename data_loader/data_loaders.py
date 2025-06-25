@@ -1,267 +1,21 @@
 from typing import List, Optional, Callable, Tuple
-from proj_preproc.normalization import normalize_data, denormalize_data, create_normalization_data
 from proj_preproc.viz import visualize_pollutant_vs_weather_var, visualize_batch_data
+from torch.utils.data import WeightedRandomSampler, SubsetRandomSampler
 import os
 from os.path import join
-from torch.utils.data import Dataset
-from pandas import DataFrame
-from xarray import Dataset as XDataset
 import numpy as np
-import pickle
 import pandas as pd
 from base import BaseDataLoader
-from data_loader.preproc_data import preproc_pollution, preproc_weather, intersect_dates
+from data_loader.data_sets import MLforecastDataset
 import torch
 import time
-
-class MLforecastDataset(Dataset):
-    """
-    Custom dataset for ML forecasting that loads and preprocesses pollution and weather data.
-    
-    Args:
-        pollution_folder (str): Path to folder containing pollution CSV files
-        weather_folder (str): Path to folder containing weather netCDF files
-        years (list): List of years to process
-        prev_pollutant_hours (int, optional): Number of previous hours of pollution data to use. Defaults to 24.
-        prev_weather_hours (int, optional): Number of previous hours of weather data to use. Defaults to 2.
-        next_weather_hours (int, optional): Number of future hours of weather data to predict. Defaults to 1.
-        transform (callable, optional): Optional transform to be applied to samples
-        
-    Attributes:
-        pollution_data (pandas.DataFrame): Preprocessed pollution data
-        weather_data (xarray.Dataset): Preprocessed weather data
-        total_dates (int): Number of timesteps in the dataset
-        features (numpy.ndarray): Weather data converted to numpy array
-    """
-    def __init__(self, 
-                 pollution_folder: str, 
-                 weather_folder: str, 
-                 norm_params_file: str,
-                 training_folder: str,
-                 years: List[int], 
-                 pollutants_to_keep: List[str],
-                 prev_pollutant_hours: int = 24, 
-                 prev_weather_hours: int = 2,
-                 next_weather_hours: int = 1, 
-                 auto_regresive_steps: int = 1,
-                 transform: Optional[Callable] = None) -> None:
-        """Initialize the dataset."""
-
-        # Save the data to pickle files with year range in filename
-        start_year = min(years)
-        end_year = max(years)
-
-        pollution_data_file = join(training_folder, f'pollution_data_{start_year}_to_{end_year}.pkl')
-        weather_data_file = join(training_folder, f'weather_data_{start_year}_to_{end_year}.pkl')
-
-        self.prev_pollutant_hours = prev_pollutant_hours
-        self.prev_weather_hours = prev_weather_hours
-        self.next_weather_hours = next_weather_hours
-        self.auto_regresive_steps = auto_regresive_steps
-        self.pollutants_to_keep = pollutants_to_keep
-
-        self.data = {}
-        if not os.path.exists(pollution_data_file) or not os.path.exists(weather_data_file):
-            print("Preprocessing data and saving to pickle files")
-            pollution_data: DataFrame = preproc_pollution(pollution_folder, years, pollutants_to_keep)
-            weather_data: XDataset = preproc_weather(weather_folder, years)
-            
-            pollution_data, weather_data = intersect_dates( pollution_data, weather_data)
-
-            # Normalize data
-            if not os.path.exists(norm_params_file):
-                print("Creating normalization parameters file")
-                create_normalization_data(norm_params_file, pollution_data, weather_data)
-
-            pollution_data, weather_data_xarray = normalize_data(norm_params_file, pollution_data, weather_data)
-
-            self.pollution_data = pollution_data
-            # Replace all the nan values with 0
-            print("Replacing all the pollution nan values with 0")
-            # Check if there are still nan values
-            self.pollution_data.fillna(0, inplace=True)
-            self.pollution_data.isna().any().any()
-
-            # Concatenate weather data and transform to numpy array
-            print("Concatenating weather data and transforming to numpy array")
-            weather_vars = list(weather_data_xarray.data_vars)
-            weather_arrays = [weather_data_xarray[var].values.astype(np.float32) for var in weather_vars]
-            weather_array = np.array(weather_arrays)
-
-            # Switch first and second axis
-            self.weather_data = weather_array.swapaxes(1, 0)
-
-            # Replace all the nan values with 0
-            print("Replacing all the weather nan values with 0")
-            self.weather_data = np.nan_to_num(self.weather_data)
-            print(f"Weather array final shape: {self.weather_data.shape}")
-            with open(join(training_folder, f'pollution_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
-                pickle.dump(self.pollution_data, f)
-            with open(join(training_folder, f'weather_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
-                pickle.dump(self.weather_data, f)
-
-            # ================== Only for visualization ==================
-            self.pollutant_imputed_columns = [col for col in self.pollution_data.columns if col.startswith('i_cont_')]
-
-            # Save the imputed columns to a separate dataframe
-            self.pollutant_imputed_data = self.pollution_data[self.pollutant_imputed_columns]
-
-            viz_stations = ['PED', 'MER', 'UIZ']
-            viz_pollutants = ['otres', 'co']
-            viz_weather_vars = list(weather_data_xarray.data_vars)
-            # Visualize the data
-            for pollutant in viz_pollutants:
-                for station in viz_stations:
-                    for weather_var in viz_weather_vars:
-                        visualize_pollutant_vs_weather_var(self.pollution_data, 
-                                                            weather_data_xarray, 
-                                                            self.pollutant_imputed_data,
-                                                            join(training_folder, 'imgs', f'{station} and {pollutant} vs {weather_var}.png'),
-                                                            pollutant_col=f'cont_{pollutant}_{station}', weather_var=weather_var, hours_to_plot=range(48))
-
-        else:
-            print("Loading data from pickle files")
-            self.pollution_data = pd.read_pickle(pollution_data_file)
-            self.weather_data = pd.read_pickle(weather_data_file)
-
-        # ======================== Replacing all pollutants columns with the mean of the stations ========================(except otres) 
-        self.pollutant_columns = [col for col in self.pollution_data.columns if col.startswith('cont_')]
-        # Calculate mean value for each pollutant across all stations, except otres
-        pollutant_means = {}
-        otres_columns = []
-        for pollutant in self.pollutants_to_keep:
-            # Get all columns for this pollutant across stations
-            pollutant_cols = [col for col in self.pollutant_columns if f'cont_{pollutant}_' in col]
-            
-            if pollutant == 'otres':
-                # For otres, keep original columns
-                otres_columns = pollutant_cols
-            else:
-                # For other pollutants, calculate mean across stations
-                pollutant_mean = self.pollution_data[pollutant_cols].mean(axis=1)
-                mean_col_name = f'cont_{pollutant}_mean'
-                pollutant_means[mean_col_name] = pollutant_mean
-            
-        # Create new dataframe with mean values
-        mean_pollution_df = pd.DataFrame(pollutant_means)
-        
-        # Drop all pollutant columns except otres
-        cols_to_drop = [col for col in self.pollutant_columns if col not in otres_columns]
-        self.pollution_data = self.pollution_data.drop(columns=cols_to_drop)
-        
-        # Add the mean columns for non-otres pollutants
-        self.pollution_data = pd.concat([self.pollution_data, mean_pollution_df], axis=1)
-
-        # ======================== Dropping the imputed columns from the pollution data (except otres) ========================
-        # Select the imputed columns names and indeces that start with 'i_cont_' (imputed continuous pollutants)
-        self.imputed_mask_columns = [col for col in self.pollution_data.columns if col.startswith('i_cont_') and 'otres' not in col]
-        # Save the imputed columns to a separate dataframe (it keeps the imputed columns)
-        self.pollutant_imputed_data = self.pollution_data[self.imputed_mask_columns] # Pollutants only data
-        # Remove the imputed columns from the pollution data (it keeps the pollutant column and the time related columns)
-        self.pollution_data = self.pollution_data.drop(columns=self.imputed_mask_columns) # Pollutants and time related columns
-        # Get the updated imputed columns names
-        self.imputed_mask_columns = [col for col in self.pollution_data.columns if col.startswith('i_cont_')]
-        self.imputed_mask_columns_idx = [i for i, col in enumerate(self.pollution_data.columns) if col.startswith('i_cont_')]
-
-        # ======================== Dropping the imputed columns from the pollution data ========================
-        # Save the imputed columns to a separate dataframe
-        self.pollutant_columns = [col for col in self.pollution_data.columns if col.startswith('cont_')]
-        self.pollutant_imputed_data = self.pollution_data[self.imputed_mask_columns]
-        # Remove the imputed columns from the pollution data (it keeps the pollutant column and the time related columns)
-        self.x_input_data = self.pollution_data.drop(columns=self.imputed_mask_columns) # Pollutants and time related columns
-        self.y_output_data = self.pollution_data[self.pollutant_columns] # Pollutants only data    
-
-        # ======================== Getting names and indices of the columns for the input data ========================
-        # Get both the indices and column names for pollutant columns
-        self.pollutant_columns = [col for col in self.x_input_data.columns if col.startswith('cont_')]
-        self.pollutant_columns_idx = [self.x_input_data.columns.get_loc(col) for col in self.pollutant_columns]
-        # Get the columns and names of the time related inputs
-        self.time_related_columns = [col for col in self.x_input_data.columns if col.endswith(('day', 'week', 'year'))]
-        self.time_related_columns_idx = [self.x_input_data.columns.get_loc(col) for col in self.time_related_columns]
-
-        # ======================== Getting names and indices of the target columns ========================
-        # This has to be done after y_output_data is defined
-        self.target_columns = self.y_output_data.columns
-        self.target_columns_idx = [self.y_output_data.columns.get_loc(col) for col in self.target_columns]
-            
-        self.total_dates: int = len(self.pollution_data)
-        self.dates = self.pollution_data.index
-        self.transform = transform
-        print("Done initializing dataset!")
-    
-    def get_column_and_index_names(self, column_type: str):
-        """Get the column names and indices of the pollution dataframe"""
-        if column_type == "pollutant_only":
-            return self.pollutant_columns, self.pollutant_columns_idx
-        elif column_type == "imputed_mask":
-            return self.imputed_mask_columns, self.imputed_mask_columns_idx
-        elif column_type == "time":
-            return self.time_related_columns, self.time_related_columns_idx
-        elif column_type == "target":
-            return self.target_columns, self.target_columns_idx
-        else:
-            raise ValueError(f"Invalid column type: {column_type}")
-
-    def __len__(self) -> int:
-        """Return the number of samples in the dataset."""
-        return self.total_dates
-        
-    def __getitem__(self, idx: int) -> int:
-        """Get a single sample from the dataset."""
-
-        start_time = time.time()
-        
-        # Validate that the index is within the bounds of the dataset considering the previous and next weather hours
-        while idx < self.prev_pollutant_hours or idx >= self.total_dates - self.next_weather_hours - self.auto_regresive_steps:
-            idx = np.random.randint(0, self.total_dates)
-        validation_time = time.time() - start_time
-
-        # Define the input data. x_pollution contains the pollution data and the weather data in a two dimentional tuple
-        x_pollution = self.x_input_data.iloc[idx-self.prev_pollutant_hours:idx]
-        x_weather = self.weather_data[idx-self.prev_weather_hours:idx + self.next_weather_hours + self.auto_regresive_steps]
-
-        # Define the output data. y_imputed_pollutant_data contains the imputed pollutant data and y_pollutant_data contains the pollutant data
-        y_imputed_pollutant_data = self.pollutant_imputed_data.iloc[idx:idx + self.auto_regresive_steps]
-        y_pollutant_data = self.y_output_data.iloc[idx:idx + self.auto_regresive_steps]
-        data_loading_time = time.time() - start_time - validation_time
-        
-        # Convert numpy arrays to tensors
-        x = [torch.FloatTensor(x_pollution.to_numpy().astype(np.float32)), 
-             torch.FloatTensor(x_weather.astype(np.float32))]
-        y = [torch.FloatTensor(y_pollutant_data.to_numpy().astype(np.float32)), 
-             torch.FloatTensor(y_imputed_pollutant_data.to_numpy().astype(np.float32))]
-        tensor_conversion_time = time.time() - start_time - validation_time - data_loading_time 
-
-        # print(f"Timing breakdown:")
-        # print(f"  Validation: {validation_time:.4f}s")
-        # print(f"  Data loading: {data_loading_time:.4f}s") 
-        # print(f"  Tensor conversion: {tensor_conversion_time:.4f}s")
-        # print(f"  Total time: {time.time() - start_time:.4f}s")
-
-        # x contains the pollution data and the weather data in a two dimentional tuple
-        # y contains the target data and the imputed data in a two dimentional tuple
-        # z contains the current datetime of the data from the pollution dataframe index
-        timestamp = self.x_input_data.iloc[idx].name.timestamp()
-        rounded_timestamp = round(timestamp / 3600) * 3600  # Round to nearest hour
-        current_datetime = torch.tensor(rounded_timestamp, dtype=torch.float)
-
-        return x, y, current_datetime
-
 
 class MLforecastDataLoader(BaseDataLoader):
     """
     DataLoader for the MLforecastDataset that handles batching and shuffling.
     
     Args:
-        pollution_folder (str): Path to folder containing pollution CSV files
-        weather_folder (str): Path to folder containing weather netCDF files
-        training_folder (str): Path to folder for saving/loading processed data
-        years (list): List of years to process
-        pollutants_to_keep (list): List of pollutants to keep
-        prev_pollutant_hours (int): Number of previous pollution hours to use
-        prev_weather_hours (int): Number of previous weather hours to use
-        next_weather_hours (int): Number of future weather hours to predict
-        auto_regresive_steps (int): Number of steps for auto-regression
+        dataset (MLforecastDataset): The dataset to load
         batch_size (int): Number of samples per batch
         shuffle (bool): Whether to shuffle the data
         validation_split (float): Fraction of data to use for validation
@@ -270,39 +24,86 @@ class MLforecastDataLoader(BaseDataLoader):
     def __init__(self, 
                 pollution_folder: str,
                 weather_folder: str,
+                norm_params_file: str,
                 training_folder: str,
                 years: List[int],
                 pollutants_to_keep: List[str],
-                prev_pollutant_hours: int = 24,
-                prev_weather_hours: int = 2,
-                next_weather_hours: int = 1,
-                auto_regresive_steps: int = 1,
+                prev_pollutant_hours: int,
+                prev_weather_hours: int,
+                next_weather_hours: int,
+                auto_regresive_steps: int,
+                bootstrap_enabled: bool,
+                bootstrap_repetition: int,
+                bootstrap_threshold: float,
                 batch_size: int = 32,
                 shuffle: bool = True,
                 validation_split: float = 0.0,
                 num_workers: int = 1) -> None:
         """Initialize the data loader."""
         
-        # Create norm_params_file path
-        start_year = min(years)
-        end_year = max(years)
-        norm_params_file = join(training_folder, f"norm_params_{start_year}_to_{end_year}.pkl")
-
-        # Create the dataset
+        # Store the dataset
         self.dataset = MLforecastDataset(
-            pollution_folder=pollution_folder,
-            weather_folder=weather_folder,
-            norm_params_file=norm_params_file,
-            training_folder=training_folder,
-            years=years,
-            pollutants_to_keep=pollutants_to_keep,
-            prev_pollutant_hours=prev_pollutant_hours,
-            prev_weather_hours=prev_weather_hours,
-            next_weather_hours=next_weather_hours,
-            auto_regresive_steps=auto_regresive_steps
-        )
+        pollution_folder=pollution_folder,
+        weather_folder=weather_folder,
+        norm_params_file=norm_params_file,
+        training_folder=training_folder,
+        years=years,
+        pollutants_to_keep=pollutants_to_keep,
+        prev_pollutant_hours=prev_pollutant_hours,
+        prev_weather_hours=prev_weather_hours,
+        next_weather_hours=next_weather_hours,
+        auto_regresive_steps=auto_regresive_steps,
+        bootstrap_enabled=bootstrap_enabled,
+        bootstrap_repetition=bootstrap_repetition,
+        bootstrap_threshold=bootstrap_threshold
+    )
+        
+        # Create weighted sampler if bootstrap is enabled
+        if hasattr(self.dataset, 'random_sampler_weights') and self.dataset.bootstrap_enabled:
+            self.weights = self.dataset.random_sampler_weights
+            self.sampler = WeightedRandomSampler(self.weights, len(self.weights), replacement=True)
+            # Turn off shuffle when using sampler
+            shuffle = False
+        else:
+            self.sampler = None
+            self.weights = None
 
         super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
+
+    def _split_sampler(self, split):
+        """Override to handle weighted sampling with validation split."""
+        if split == 0.0:
+            # No validation split, use weighted sampler if available
+            if self.sampler is not None:
+                return self.sampler, None
+            return None, None
+
+        # Handle validation split with weighted sampling
+        if self.sampler is not None:
+            # For weighted sampling with validation split, we need to create separate samplers
+            # This is a simplified approach - you might want to implement more sophisticated validation splitting
+            n_samples = len(self.dataset)
+            idx_full = np.arange(n_samples)
+            
+            if isinstance(split, int):
+                assert split > 0
+                assert split < n_samples, "validation set size is configured to be larger than entire dataset."
+                len_valid = split
+            else:
+                len_valid = int(n_samples * split)
+
+            valid_idx = idx_full[-len_valid:]
+            train_idx = np.delete(idx_full, np.arange(n_samples-len_valid, n_samples))
+            
+            # Create weighted sampler for training data only
+            train_weights = self.weights[train_idx]
+            train_sampler = WeightedRandomSampler(train_weights, len(train_weights), replacement=True)
+            valid_sampler = SubsetRandomSampler(valid_idx)
+            
+            return train_sampler, valid_sampler
+        else:
+            # Fall back to original implementation for non-weighted sampling
+            return super()._split_sampler(split)
 
     def get_pollution_dataframe(self) -> pd.DataFrame:
         """Get the pollution dataframe"""
@@ -312,7 +113,24 @@ class MLforecastDataLoader(BaseDataLoader):
         """Get the column names and indices of the pollution dataframe"""
         return self.dataset.get_column_and_index_names(column_type)
 
-    
+    def get_sampling_info(self) -> dict:
+        """Get information about the sampling configuration."""
+        info = {
+            'bootstrap_enabled': self.dataset.bootstrap_enabled,
+            'total_samples': len(self.dataset),
+            'using_weighted_sampling': self.sampler is not None
+        }
+        
+        if self.dataset.bootstrap_enabled:
+            info.update({
+                'bootstrap_threshold': self.dataset.bootstrap_threshold,
+                'bootstrap_repetition': self.dataset.bootstrap_repetition,
+                'high_ozone_events': len(self.dataset.bootstrap_indexes),
+                'weight_range': (self.weights.min(), self.weights.max()) if self.weights is not None else None
+            })
+        
+        return info
+
 if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
@@ -334,6 +152,9 @@ if __name__ == '__main__':
     prev_weather_hours = 4
     next_weather_hours = 2
     auto_regresive_steps = 4
+    bootstrap_enabled = True
+    bootstrap_repetition = 20
+    bootstrap_threshold = 3.0
 
     # Print the paramters
     print(f"Batch size: {batch_size}")
@@ -341,15 +162,15 @@ if __name__ == '__main__':
     print(f"Prev weather hours: {prev_weather_hours}")
     print(f"Next weather hours: {next_weather_hours}")
     print(f"Auto regresive steps: {auto_regresive_steps}")
-    
-    dataset = MLforecastDataset(
-        pollution_folder, weather_folder, norm_params_file, training_folder, years, pollutants_to_keep,
-        prev_pollutant_hours, prev_weather_hours, next_weather_hours, auto_regresive_steps)
-       
-    # Create dataloader
+
+    # Create dataset
+
+
+    # Create dataloader (weighted sampling is handled internally)
     data_loader = MLforecastDataLoader(
         pollution_folder=pollution_folder,
         weather_folder=weather_folder,
+        norm_params_file=norm_params_file,
         training_folder=training_folder,
         years=years,
         pollutants_to_keep=pollutants_to_keep,
@@ -357,9 +178,18 @@ if __name__ == '__main__':
         prev_weather_hours=prev_weather_hours,
         next_weather_hours=next_weather_hours,
         auto_regresive_steps=auto_regresive_steps,
+        bootstrap_enabled=bootstrap_enabled,
+        bootstrap_repetition=bootstrap_repetition,
+        bootstrap_threshold=bootstrap_threshold,
         batch_size=batch_size,
         shuffle=True
     )
+
+    # Make a histogram of the weights
+    plt.plot(data_loader.weights)
+    plt.savefig("bootstrap_weights_plot.png")
+    plt.show()
+
     
     # Test loading a batch
     pollution_column_names, pollution_column_indices = data_loader.get_pollution_column_names_and_indices("pollutant_only")
@@ -367,23 +197,31 @@ if __name__ == '__main__':
     time_related_columns, time_related_columns_indices = data_loader.get_pollution_column_names_and_indices("time")
     target_columns, target_columns_indices = data_loader.get_pollution_column_names_and_indices("target")
 
+    # Print sampling information
+    sampling_info = data_loader.get_sampling_info()
+    print("\n=== Sampling Information ===")
+    for key, value in sampling_info.items():
+        print(f"  {key}: {value}")
+
     # Print the time related columns
-    print(f"Time related columns: {time_related_columns}")
+    print(f"\nTime related columns: {time_related_columns}")
     print(f"Time related columns indices: {time_related_columns_indices}")
 
     for batch_idx, batch in enumerate(data_loader):
         # Print the shape of each element in the batch (x, y)
         print(f"Batch {batch_idx}")
-        print(f"  x pollution shape: {batch[0][0].shape} (batch, prev_pollutant_hours, stations*1(ozone) + (contaminants - 1)(means) + time related columns)")
-        print(f"  x weather shape: {batch[0][1].shape} (batch, prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)")
-        print(f"  y pollution shape: {batch[1][0].shape} (batch, auto_regresive_steps, stations*1(ozone) + (contaminants - 1)(means))")
-        print(f"  y imputed pollution shape: {batch[1][1].shape} (batch, auto_regresive_steps, stations*1(ozone))")
+        # Print total number of contaminants    
+        print(f"  Total number of contaminants: {len(pollutants_to_keep)}")
+        print(f"  x pollution shape: {batch[0][0].shape} (batch({batch_size}), prev_pollutant_hours({prev_pollutant_hours}), stations(30)(ozone) + (contaminants({len(pollutants_to_keep)}) - 1)*3(means, min, max) + time related columns(12))")
+        print(f"  x weather shape: {batch[0][1].shape} (batch({batch_size}), prev_weather_hours({prev_weather_hours}) + next_weather_hours({next_weather_hours}) + auto_regresive_steps({auto_regresive_steps}) + 1, fields(8), lat(25), lon(25))")
+        print(f"  y pollution shape: {batch[1][0].shape} (batch({batch_size}), auto_regresive_steps({auto_regresive_steps}), stations(30)(ozone) + (contaminants({len(pollutants_to_keep)}) - 1)*3(means, min, max))")
+        print(f"  y imputed pollution shape: {batch[1][1].shape} (batch({batch_size}), auto_regresive_steps({auto_regresive_steps}), stations(30)(ozone))")
 
         # Here we can plot the data to be sure that the data is loaded correctly
-        pollution_data = batch[0][0].numpy()[0,:,:]  # Final shape is (prev_pollutant_hours, stations*1(ozone) + contaminants + time related columns)
+        pollution_data = batch[0][0].numpy()[0,:,:]  # Final shape is (prev_pollutant_hours, stations(30)(ozone) + (contaminants - 1)*3(means, min, max) + time related columns(12))
         weather_data = batch[0][1].numpy()[0,:,:,:,:]  # Final shape is (prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)
-        target_data = batch[1][0].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*1(ozone) + (contaminants - 1)(means))
-        imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*1(ozone))
+        target_data = batch[1][0].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations(30)(ozone) + (contaminants - 1)*3(means, min, max))
+        imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations(30)(ozone))
         current_datetime = pd.to_datetime(batch[2][0].item(), unit='s')
 
         # Plot the pollution data

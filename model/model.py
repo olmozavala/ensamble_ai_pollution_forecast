@@ -55,7 +55,7 @@ class TransformerEncoder(nn.Module):
 class MultiStreamTransformerModel(BaseModel):
     def __init__(self, 
                  weather_time_dims: int,
-                 pollution_time_dims: int,
+                 prev_pollutant_hours: int,
                  weather_fields: int,
                  input_features: int,
                  weather_embedding_size: int,
@@ -74,7 +74,7 @@ class MultiStreamTransformerModel(BaseModel):
 
         print("Buidling MultiStreamTransformerModel...")
         print(f"weather_time_dims: {weather_time_dims}")
-        print(f"pollution_time_dims: {pollution_time_dims}")
+        print(f"prev_pollutant_hours: {prev_pollutant_hours}")
         print(f"weather_fields: {weather_fields}")
         print(f"input_features: {input_features}")
         print(f"weather_embedding_size: {weather_embedding_size}")
@@ -85,7 +85,7 @@ class MultiStreamTransformerModel(BaseModel):
         print(f"pollution_transformer_blocks: {pollution_transformer_blocks}")
 
         self.weather_time_dims = weather_time_dims
-        self.pollution_time_dims = pollution_time_dims
+        self.prev_pollutant_hours = prev_pollutant_hours
         self.weather_fields = weather_fields
         # Weather branch - one transformer per field
         self.weather_patch_embeddings = nn.ModuleList([
@@ -105,7 +105,7 @@ class MultiStreamTransformerModel(BaseModel):
         # Pollution branch
         self.pollution_embedding = nn.Linear(input_features, pollution_embedding_size)
         self.pollution_pos_encoding = nn.Parameter(
-            torch.randn(pollution_time_dims, pollution_embedding_size)
+            torch.randn(prev_pollutant_hours, pollution_embedding_size)
         )
         # Create multiple transformer blocks for pollution
         self.pollution_transformers = nn.ModuleList([
@@ -116,7 +116,7 @@ class MultiStreamTransformerModel(BaseModel):
         # Merge layers
         # Calculate sizes based on the model configuration
         weather_merged_size = weather_embedding_size * weather_time_dims * weather_fields
-        pollution_merged_size = pollution_embedding_size * pollution_time_dims
+        pollution_merged_size = pollution_embedding_size * prev_pollutant_hours
         merged_size = weather_merged_size + pollution_merged_size
         
         print(f"Initializing decoder with input size: {merged_size}")
@@ -246,7 +246,7 @@ if __name__ == "__main__":
     # %% Initialize model
     model = MultiStreamTransformerModel(
         weather_time_dims=weather_time_steps,
-        pollution_time_dims=pollution_time_steps,
+        prev_pollutant_hours=pollution_time_steps,
         weather_fields=weather_fields,
         input_features=input_features,
         weather_embedding_size=embedding_dim,

@@ -10,6 +10,7 @@ from xarray import Dataset
 import os
 import re
 from pandas import DataFrame
+import numpy as np
 
 def read_pollution_data(pollution_folder: str, years: List[int]) -> List[DataFrame]:
     """
@@ -195,6 +196,45 @@ def intersect_dates(pollution_data: DataFrame, weather_data: Dataset) -> Tuple[D
 
     return pollution_data, weather_data
 
+def bootstrap_high_ozone_events(pollution_data: DataFrame, bootstrap_threshold: float = 2.5) -> List[int]:
+    """
+    Identify high ozone events that should be bootstrapped.
+    
+    Args:
+        pollution_data (pandas.DataFrame): Preprocessed pollution data
+        bootstrap_threshold (float): Number of standard deviations above mean to consider as high ozone event
+        
+    Returns:
+        list: List of row indices that should be bootstrapped (replicated)
+        
+    This function:
+    1. Calculates mean and std of all otres columns across all timesteps
+    2. Identifies timesteps where any station's ozone > mean + bootstrap_threshold*std
+    3. Returns the row indices of those high ozone events
+    """
+    # Get all otres columns
+    otres_columns = [col for col in pollution_data.columns if col.startswith('cont_otres_')]
+    
+    if not otres_columns:
+        print("No otres columns found for bootstrapping")
+        return []
+        
+    # Calculate mean and std across all otres columns for all timesteps
+    otres_data = pollution_data[otres_columns]
+    overall_mean = otres_data.values.flatten().mean()
+    overall_std = otres_data.values.flatten().std()
+    
+    print(f"Ozone statistics - Mean: {overall_mean:.4f}, Std: {overall_std:.4f}")
+    print(f"Threshold for high ozone events: {overall_mean + bootstrap_threshold * overall_std:.4f}")
+    
+    # Find timesteps where any station's ozone is above threshold std from mean
+    threshold = overall_mean + bootstrap_threshold * overall_std
+    high_ozone_mask = (otres_data > threshold).any(axis=1)
+    high_ozone_row_numbers = np.where(high_ozone_mask)[0].tolist()  # Get numeric row indices
+    
+    print(f"Found {len(high_ozone_row_numbers)} timesteps with high ozone events out of {len(pollution_data)} total timesteps")
+    
+    return high_ozone_row_numbers
 
 if __name__ == "__main__":
     root_folder = "/home/olmozavala/DATA/AirPollution"
@@ -207,6 +247,17 @@ if __name__ == "__main__":
     weather_data: Dataset = preproc_weather(weather_folder, years)
 
     pollution_data, weather_data = intersect_dates(pollution_data, weather_data)
+
+    # Test bootstrap functionality
+    print("\n=== Testing Bootstrap Functionality ===")
+    print(f"Original pollution data shape: {pollution_data.shape}")
+    print(f"Original weather data shape: {weather_data.dims}")
+    
+    # Test with different repetition values
+    for repetition in [5, 10, 20]:
+        print(f"\n--- Testing with repetition={repetition} ---")
+        high_ozone_row_numbers = bootstrap_high_ozone_events(pollution_data, repetition)
+        print(f"Found {len(high_ozone_row_numbers)} high ozone events")
 
     visualize_pollutant_vs_weather_var(pollution_data, weather_data, None, output_file=join(pollution_folder, "pollution_vs_weather.png"),
                                       pollutant_col='cont_otres_MER', weather_var='T2')

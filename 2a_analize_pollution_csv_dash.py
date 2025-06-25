@@ -6,9 +6,14 @@ from dash import dcc, html, dash_table, Input, Output
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
+import json
+
+# Load config and get data folder path
+with open('config.json', 'r') as f:
+    config = json.load(f)
 
 # Path to the folder containing the CSV files
-data_folder = "/home/olmozavala/DATA/AirPollution/PollutionCSV"
+data_folder = config['data_loader']['args']['pollution_folder']
 
 def list_csv_files(folder: str) -> List[str]:
     """
@@ -184,6 +189,13 @@ def update_time_series_plot(selected_file: str, start_time: int, weeks: int) -> 
                 pollutants[pollutant_type] = []
             pollutants[pollutant_type].append(col)
     
+    # Calculate the maximum value of all otres columns for reference line
+    otres_cols = pollutants.get('otres', [])
+    otres_max_per_hour = None
+    if otres_cols:
+        otres_data = df[otres_cols]
+        otres_max_per_hour = otres_data.max(axis=1)  # Maximum across all otres columns for each hour
+    
     # Create subplots
     n_pollutants = len(pollutants)
     fig = make_subplots(
@@ -220,6 +232,20 @@ def update_time_series_plot(selected_file: str, start_time: int, weeks: int) -> 
                       line=dict(color='green'), showlegend=(i==1)),
             row=i, col=1
         )
+        
+        # Add otres max reference line if available
+        if otres_max_per_hour is not None and pollutant_type in ['nox', 'pmdoscinco', 'nodos', 'no', 'pmco', 'sodos', 'pmdiez']:
+            fig.add_trace(
+                go.Scatter(
+                    x=time_index, 
+                    y=otres_max_per_hour, 
+                    mode='lines', 
+                    name='Otres Max Reference',
+                    line=dict(color='darkgrey', dash='dash', width=2),
+                    showlegend=(i==1)
+                ),
+                row=i, col=1
+            )
     
     fig.update_layout(
         height=max(500, 600 * n_pollutants),
@@ -230,4 +256,4 @@ def update_time_series_plot(selected_file: str, start_time: int, weeks: int) -> 
     return fig
 
 if __name__ == "__main__":
-    app.run(debug=True,  port=8055) 
+    app.run(debug=True,  port=8027) 

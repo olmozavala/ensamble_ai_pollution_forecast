@@ -6,7 +6,7 @@
         "type": "MultiStreamTransformerModel",
         "args": {
             "weather_time_dims": 4,
-            "pollution_time_dims": 2,
+            "prev_pollutant_hours": 2,
             "weather_fields": 8,
             "pollution_features": 146,
             "weather_embedding_size": 128,
