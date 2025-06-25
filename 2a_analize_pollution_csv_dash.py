@@ -7,13 +7,15 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 import json
+from os.path import join
 
 # Load config and get data folder path
 with open('config.json', 'r') as f:
     config = json.load(f)
 
 # Path to the folder containing the CSV files
-data_folder = config['data_loader']['args']['pollution_folder']
+data_folder = config['data_loader']['args']['data_folder']
+pollution_folder = join(data_folder, "PollutionCSV")
 
 def list_csv_files(folder: str) -> List[str]:
     """
@@ -57,7 +59,7 @@ app.layout = html.Div([
     html.H1("Pollution CSV Explorer"),
     dcc.Dropdown(
         id='csv-file-dropdown',
-        options=[{'label': f, 'value': f} for f in sorted(list_csv_files(data_folder))],
+        options=[{'label': f, 'value': f} for f in sorted(list_csv_files(pollution_folder))],
         placeholder="Select a CSV file",
         style={'width': '50%'},
         value='data_imputed_7_2024.csv'
@@ -122,7 +124,7 @@ def update_summary(selected_file: str):
     """
     if not selected_file:
         return html.Div("Select a file to see summary."), [], [], [], []
-    file_path = os.path.join(data_folder, selected_file)
+    file_path = os.path.join(pollution_folder, selected_file)
     summary = summarize_csv(file_path)
     summary_html = html.Div([
         html.P(f"Total rows: {summary['total_rows']:,}"),
@@ -169,7 +171,7 @@ def update_time_series_plot(selected_file: str, start_time: int, weeks: int) -> 
     if not selected_file:
         return go.Figure()
     
-    file_path = os.path.join(data_folder, selected_file)
+    file_path = os.path.join(pollution_folder, selected_file)
     end_time = start_time + (weeks * 7 * 24)  # Convert weeks to hours
     
     # Read the data for the specified time range

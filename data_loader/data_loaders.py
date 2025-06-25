@@ -22,10 +22,8 @@ class MLforecastDataLoader(BaseDataLoader):
         num_workers (int): Number of worker processes for data loading
     """
     def __init__(self, 
-                pollution_folder: str,
-                weather_folder: str,
+                data_folder: str,
                 norm_params_file: str,
-                training_folder: str,
                 years: List[int],
                 pollutants_to_keep: List[str],
                 prev_pollutant_hours: int,
@@ -43,10 +41,8 @@ class MLforecastDataLoader(BaseDataLoader):
         
         # Store the dataset
         self.dataset = MLforecastDataset(
-        pollution_folder=pollution_folder,
-        weather_folder=weather_folder,
+        data_folder=data_folder,
         norm_params_file=norm_params_file,
-        training_folder=training_folder,
         years=years,
         pollutants_to_keep=pollutants_to_keep,
         prev_pollutant_hours=prev_pollutant_hours,
@@ -135,16 +131,13 @@ if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
     # Test parameters
-    root_folder = "/home/olmozavala/DATA/AirPollution"
-    pollution_folder = join(root_folder, "PollutionCSV")
-    weather_folder = join(root_folder, "WRF_NetCDF")
-    training_folder = join(root_folder, "TrainingData")
+    data_folder = "/home/olmozavala/DATA/AirPollution"
     years = [2015]
 
     start_year = min(years)
     end_year = max(years)
 
-    norm_params_file = join(training_folder, f"norm_params_{start_year}_to_{end_year}.pkl")
+    norm_params_file = join(data_folder, "TrainingData", f"norm_params_{start_year}_to_{end_year}.pkl")
     pollutants_to_keep = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco']
     # Data loader parameters
     batch_size = 2
@@ -168,10 +161,8 @@ if __name__ == '__main__':
 
     # Create dataloader (weighted sampling is handled internally)
     data_loader = MLforecastDataLoader(
-        pollution_folder=pollution_folder,
-        weather_folder=weather_folder,
+        data_folder=data_folder,
         norm_params_file=norm_params_file,
-        training_folder=training_folder,
         years=years,
         pollutants_to_keep=pollutants_to_keep,
         prev_pollutant_hours=prev_pollutant_hours,

@@ -17,8 +17,7 @@ class MLforecastDataset(Dataset):
     Custom dataset for ML forecasting that loads and preprocesses pollution and weather data.
     
     Args:
-        pollution_folder (str): Path to folder containing pollution CSV files
-        weather_folder (str): Path to folder containing weather netCDF files
+        data_folder (str): Path to the main data folder containing subfolders for pollution, weather, and training data
         years (list): List of years to process
         prev_pollutant_hours (int, optional): Number of previous hours of pollution data to use. Defaults to 24.
         prev_weather_hours (int, optional): Number of previous hours of weather data to use. Defaults to 2.
@@ -36,10 +35,8 @@ class MLforecastDataset(Dataset):
         features (numpy.ndarray): Weather data converted to numpy array
     """
     def __init__(self, 
-                 pollution_folder: str, 
-                 weather_folder: str, 
+                 data_folder: str, 
                  norm_params_file: str,
-                 training_folder: str,
                  years: List[int], 
                  pollutants_to_keep: List[str],
                  prev_pollutant_hours: int = 24, 
@@ -51,13 +48,18 @@ class MLforecastDataset(Dataset):
                  bootstrap_threshold: float = 2.5,
                  transform: Optional[Callable] = None) -> None:
         """Initialize the dataset."""
+        
+        # Create subfolder paths
+        self.pollution_folder = join(data_folder, "PollutionCSV")
+        self.weather_folder = join(data_folder, "WRF_NetCDF")
+        self.training_folder = join(data_folder, "TrainingData")
 
         # Save the data to pickle files with year range in filename
         start_year = min(years)
         end_year = max(years)
 
-        pollution_data_file = join(training_folder, f'pollution_data_{start_year}_to_{end_year}.pkl')
-        weather_data_file = join(training_folder, f'weather_data_{start_year}_to_{end_year}.pkl')
+        pollution_data_file = join(self.training_folder, f'pollution_data_{start_year}_to_{end_year}.pkl')
+        weather_data_file = join(self.training_folder, f'weather_data_{start_year}_to_{end_year}.pkl')
 
         self.prev_pollutant_hours = prev_pollutant_hours
         self.prev_weather_hours = prev_weather_hours
@@ -71,8 +73,8 @@ class MLforecastDataset(Dataset):
         self.data = {}
         if not os.path.exists(pollution_data_file) or not os.path.exists(weather_data_file):
             print("Preprocessing data and saving to pickle files")
-            pollution_data: DataFrame = preproc_pollution(pollution_folder, years, pollutants_to_keep)
-            weather_data: XDataset = preproc_weather(weather_folder, years)
+            pollution_data: DataFrame = preproc_pollution(self.pollution_folder, years, pollutants_to_keep)
+            weather_data: XDataset = preproc_weather(self.weather_folder, years)
             
             pollution_data, weather_data = intersect_dates( pollution_data, weather_data)
 
@@ -104,9 +106,9 @@ class MLforecastDataset(Dataset):
             print("Replacing all the weather nan values with 0")
             self.weather_data = np.nan_to_num(self.weather_data)
             print(f"Weather array final shape: {self.weather_data.shape}")
-            with open(join(training_folder, f'pollution_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
+            with open(join(self.training_folder, f'pollution_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
                 pickle.dump(self.pollution_data, f)
-            with open(join(training_folder, f'weather_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
+            with open(join(self.training_folder, f'weather_data_{start_year}_to_{end_year}.pkl'), 'wb') as f:
                 pickle.dump(self.weather_data, f)
         else:
             print("Loading data from pickle files")
@@ -283,24 +285,19 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     
     # Test parameters
-    root_folder = "/home/olmozavala/DATA/AirPollution"
-    pollution_folder = join(root_folder, "PollutionCSV")
-    weather_folder = join(root_folder, "WRF_NetCDF")
-    training_folder = join(root_folder, "TrainingData")
+    data_folder = "/home/olmozavala/DATA/AirPollution"
     years = [2015]
     
     start_year = min(years)
     end_year = max(years)
-    norm_params_file = join(training_folder, f"norm_params_{start_year}_to_{end_year}.pkl")
+    norm_params_file = join(data_folder, "TrainingData", f"norm_params_{start_year}_to_{end_year}.pkl")
     pollutants_to_keep = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco', 'nox', 'no', 'sodos', 'pmco']
     
     # Test dataset creation
     print("=== Testing MLforecastDataset ===")
     dataset = MLforecastDataset(
-        pollution_folder=pollution_folder,
-        weather_folder=weather_folder,
+        data_folder=data_folder,
         norm_params_file=norm_params_file,
-        training_folder=training_folder,
         years=years,
         pollutants_to_keep=pollutants_to_keep,
         prev_pollutant_hours=16,
