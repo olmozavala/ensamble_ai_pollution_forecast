@@ -66,6 +66,7 @@ def main(config):
     pollution_column_names, pollution_column_indices = data_loader.get_pollution_column_names_and_indices("pollutant_only")
     imputed_mask_columns, imputed_mask_columns_indices = data_loader.get_pollution_column_names_and_indices("imputed_mask")
     time_related_columns, time_related_columns_indices = data_loader.get_pollution_column_names_and_indices("time")
+    target_columns, target_columns_indices = data_loader.get_pollution_column_names_and_indices("target")
 
     contaminant_name = config['test']['visualize']['contaminant_name']
     weather_var_name = config['test']['visualize']['weather_var_name']
@@ -96,19 +97,19 @@ def main(config):
 
             if config['test']['visualize_batch']:
                 print(f"Batch {batch_idx}")
-                print(f"  x pollution shape: {batch[0][0].shape} (batch, prev_pollutant_hours, stations*contaminants + time related columns)")
+                print(f"  x pollution shape: {batch[0][0].shape} (batch, prev_pollutant_hours, stations*1(ozone) + (contaminants - 1)(means) + time related columns)")
                 print(f"  x weather shape: {batch[0][1].shape} (batch, prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)")
-                print(f"  y pollution shape: {batch[1][0].shape} (batch, auto_regresive_steps, stations*contaminants)")
-                print(f"  y imputed pollution shape: {batch[1][1].shape} (batch, auto_regresive_steps, stations*contaminants)")
+                print(f"  y pollution shape: {batch[1][0].shape} (batch, auto_regresive_steps, stations*1(ozone) + (contaminants - 1)(means))")
+                print(f"  y imputed pollution shape: {batch[1][1].shape} (batch, auto_regresive_steps, stations*1(ozone))")
 
                 # Here we can plot the data to be sure that the data is loaded correctly
                 viz_pollution_data = batch[0][0].numpy()[0,:,:]  # Final shape is (prev_pollutant_hours, stations*contaminants + time related columns)
                 viz_weather_data = batch[0][1].numpy()[0,:,:,:,:]  # Final shape is (prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)
-                viz_target_data = batch[1][0].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
-                viz_imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
+                viz_target_data = batch[1][0].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*1(ozone) + (contaminants - 1)(means))
+                viz_imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*1(ozone))
 
                 visualize_batch_data(viz_pollution_data, viz_target_data, viz_imputed_data, viz_weather_data, 
-                             plot_pollutant_indices, pollution_column_names, time_related_columns, time_related_columns_indices, weather_var_name, 
+                             plot_pollutant_indices, pollution_column_names, target_columns, time_related_columns, time_related_columns_indices, weather_var_name, 
                              batch_predictedtimes[0], output_imgs_dir, batch_idx, prev_weather_hours, next_weather_hours, 
                              auto_regresive_steps, weather_var_idx, contaminant_name)
 
@@ -131,7 +132,7 @@ def main(config):
                                               cur_weather_input.cpu().numpy(),
                                               target.cpu().numpy(),
                                               output_imgs_dir, 
-                                              plot_pollutant_indices, pollution_column_names, 
+                                              plot_pollutant_indices, pollution_column_names, target_columns, 
                                               time_related_columns, time_related_columns_indices,
                                               contaminant_name, 
                                               batch_predictedtimes[0].hour,

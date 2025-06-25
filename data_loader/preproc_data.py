@@ -26,7 +26,8 @@ def read_pollution_data(pollution_folder: str, years: List[int]) -> List[DataFra
     # Read pollution data for each year
     for year in years:
         print(f"Reading pollution data for year: {year}")
-        pollution_df = pd.read_csv(join(pollution_folder, f"data_imputed_{year}.csv"))
+        pollution_df = pd.read_csv(join(pollution_folder, f"data_imputed_7_{year}.csv"))
+        # pollution_df = pd.read_csv(join(pollution_folder, f"data_imputed_{year}.csv"))
         # Set the first column as the index and convert to datetime
         pollution_df.set_index(pollution_df.columns[0], inplace=True)
         pollution_df.index = pd.to_datetime(pollution_df.index)
@@ -108,7 +109,7 @@ def preproc_pollution(pollution_folder: str, years: List[int], pollutants_to_kee
     # Replacing inmputed values with 0 or 1. none -> 0, row_avg -> 1, last_day_same_hour -> 1
     print(f"Replacing inmputed values with 0 or 1. none -> 0, row_avg -> 1, last_day_same_hour -> 1")
     for i_col in i_cont_columns:
-        pollution_data[i_col] = pollution_data[i_col].replace({'none': 0, 'row_avg': 1, 'last_day_same_hour': 1})
+        pollution_data[i_col] = pollution_data[i_col].replace({'none': 0, 'row_avg': 1, 'last_day_same_hour': 1, 'climatology': 1})
 
     return pollution_data
 

@@ -44,7 +44,7 @@ def rmse_metric(output, target):
         float: RMSE value
     """
     with torch.no_grad():
-        return torch.sqrt(torch.mean((output - target) ** 2)).item()
+        return torch.sqrt(torch.mean((output - target[0]) ** 2)).item()
 
 
 def r2_score(output, target):

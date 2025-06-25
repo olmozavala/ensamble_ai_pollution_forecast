@@ -8,7 +8,7 @@ def nll_loss(output, target):
 
 def mse_loss(output, target):
     """Mean squared error loss for regression tasks."""
-    return F.mse_loss(output, target)
+    return F.mse_loss(output, target[0])
 
 
 def mae_loss(output, target):

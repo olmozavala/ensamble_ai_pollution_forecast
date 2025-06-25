@@ -1,18 +1,17 @@
 {
-    "name": "FourPrevHoursFourAutoRegresiveStepsFourWeatherFields",
+    "name": "MeanPollutantsNewCSVFilesImputedWithClimatology",
     "n_gpu": 1,
 
     "arch": {
         "type": "MultiStreamTransformerModel",
         "args": {
-            "weather_time_dims": 4,
-            "pollution_time_dims": 4,
+            "weather_time_dims": 7,
+            "pollution_time_dims": 16,
             "weather_fields": 8,
-            "pollution_features": 146,
+            "input_features": 46,
             "weather_embedding_size": 128,
-            "pollution_embedding_size": 128,
+            "pollution_embedding_size": 64,
             "attention_heads": 2,
-            "output_size": 134,
             "lat_size": 25,
             "lon_size": 25,
             "dropout": 0.1,
@@ -26,13 +25,13 @@
             "pollution_folder": "/home/olmozavala/DATA/AirPollution/PollutionCSV",
             "weather_folder": "/home/olmozavala/DATA/AirPollution/WRF_NetCDF",
             "training_folder": "/home/olmozavala/DATA/AirPollution/TrainingData",
-            "years": [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020],
+            "years": [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022],
             "pollutants_to_keep": ["co", "nodos", "otres", "pmdiez", "pmdoscinco"],
-            "prev_pollutant_hours": 4,
-            "prev_weather_hours": 2,
-            "next_weather_hours": 1,
+            "prev_pollutant_hours": 16,
+            "prev_weather_hours": 4,
+            "next_weather_hours": 2,
             "auto_regresive_steps": 4,
-            "batch_size": 1536,
+            "batch_size": 1024,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 4
@@ -58,8 +57,8 @@
             "amsgrad": true
         }
     },
-    "loss": "asymmetric_weighted_mse_loss",
-    "metrics": ["masked_rmse_metric"],
+    "loss": "mse_loss",
+    "metrics": ["rmse_metric"],
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
         "args": {
@@ -74,12 +73,12 @@
         }
     },
     "test": {
-        "model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/models/FourPrevHoursFourAutoRegresiveStepsFourWeatherFields/0602_161115",
+        "model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/models/DeleteFirstTryingWithMeanPollutants/0622_155927",
         "visualize_batch": false,
         "prediction_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/predictions",
         "denormalization_file": "/home/olmozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
         "data_loader": {
-            "years": [2022, 2023],
+            "years": [2023, 2024],
             "batch_size": 128,
             "shuffle": false,
             "validation_split": 0.0,
@@ -94,7 +93,7 @@
         }
     },
     "analyze": {
-        "prediction_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/predictions/FourPrevHoursFourAutoRegresiveStepsFourWeatherFields/0602_161115",
+        "prediction_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/predictions/DeleteFirstTryingWithMeanPollutants/0622_155927",
         "output_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/analysis"
     }
 }

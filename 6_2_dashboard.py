@@ -109,7 +109,15 @@ app.layout = html.Div([
         )
     ], style={'width': '80%', 'margin': 'auto', 'paddingTop': '20px'}),
 
-    html.Div(id='plots-container', style={'marginTop': '20px'})
+    html.Div(id='plots-container', style={
+        'marginTop': '20px',
+        'display': 'grid',
+        'gridTemplateColumns': '1fr 1fr',
+        'gap': '20px',
+        'width': '100%',
+        'marginLeft': 'auto',
+        'marginRight': 'auto'
+    })
 ])
 
 @app.callback(
@@ -198,7 +206,7 @@ def update_plots(selected_pollutant, selected_station, start_index, window_size)
             df_forecast['timestamp'] = pd.to_datetime(df_forecast['timestamp'])
 
             # Shift timestamp to get the actual time the forecast is for
-            time_shift = pd.Timedelta(hours=-hour)
+            time_shift = pd.Timedelta(hours=-hour + 1)
             df_forecast['target_time'] = df_forecast['timestamp'] + time_shift
 
             # Filter based on the target_time being in the window
@@ -219,8 +227,7 @@ def update_plots(selected_pollutant, selected_station, start_index, window_size)
         title=f'{selected_pollutant.upper()} at {selected_station} - All Forecasts vs. True',
         xaxis_title='Timestamp',
         yaxis_title='Concentration',
-        legend_title='Forecast Hour',
-        height=600
+        legend_title='Forecast Hour'
     )
     
     figures.append(dcc.Graph(figure=fig1))
@@ -280,14 +287,73 @@ def update_plots(selected_pollutant, selected_station, start_index, window_size)
         title=f'{selected_pollutant.upper()} - Max Values Across All Stations',
         xaxis_title='Timestamp',
         yaxis_title='Max Concentration',
-        legend_title='Forecast Hour',
-        height=600
+        legend_title='Forecast Hour'
     )
     
     figures.append(dcc.Graph(figure=fig2))
     
-    # Figure 3: Min values across all stations
+    # Figure 3: Mean values across all stations
     fig3 = go.Figure()
+    
+    # Plot true mean across all stations
+    if true_cols_all_stations:
+        df_true_source_all = data[data['predicted_hour'] == forecast_hours[0]].copy()
+        df_true_source_all['timestamp'] = pd.to_datetime(df_true_source_all['timestamp'])
+        
+        df_true_window_all = df_true_source_all[
+            (df_true_source_all['timestamp'] >= start_time) & (df_true_source_all['timestamp'] <= end_time)
+        ]
+        
+        df_true_window_all['mean_all_stations'] = df_true_window_all[true_cols_all_stations].mean(axis=1)
+        
+        fig3.add_trace(go.Scatter(
+            x=df_true_window_all['timestamp'],
+            y=df_true_window_all['mean_all_stations'],
+            mode='lines',
+            name='True Mean (All Stations)',
+            line=dict(color='black', width=3, dash='dash')
+        ))
+    
+    # Plot predicted mean across all stations for each forecast hour
+    if pred_cols_all_stations:
+        colors = [f'hsl({int(h)}, 80%, 50%)' for h in np.linspace(0, 330, len(forecast_hours))]
+        
+        for i, hour in enumerate(forecast_hours):
+            df_forecast = data[data['predicted_hour'] == hour].copy()
+            df_forecast['timestamp'] = pd.to_datetime(df_forecast['timestamp'])
+            
+            # Shift timestamp to get the actual time the forecast is for
+            time_shift = pd.Timedelta(hours=-hour + 1)
+            df_forecast['target_time'] = df_forecast['timestamp'] + time_shift
+            
+            # Filter based on the target_time being in the window
+            df_window = df_forecast[
+                (df_forecast['target_time'] >= start_time) & (df_forecast['target_time'] <= end_time)
+            ]
+            
+            if not df_window.empty:
+                # Calculate mean across all stations for this forecast hour
+                df_window['pred_mean_all_stations'] = df_window[pred_cols_all_stations].mean(axis=1)
+                
+                fig3.add_trace(go.Scatter(
+                    x=df_window['target_time'],
+                    y=df_window['pred_mean_all_stations'],
+                    mode='lines',
+                    name=f'Pred Mean Hour {hour}',
+                    line=dict(color=colors[i], width=1)
+                ))
+    
+    fig3.update_layout(
+        title=f'{selected_pollutant.upper()} - Mean Values Across All Stations',
+        xaxis_title='Timestamp',
+        yaxis_title='Mean Concentration',
+        legend_title='Forecast Hour'
+    )
+    
+    figures.append(dcc.Graph(figure=fig3))
+    
+    # Figure 4: Min values across all stations
+    fig4 = go.Figure()
     
     # Plot true min across all stations
     if true_cols_all_stations:
@@ -300,7 +366,7 @@ def update_plots(selected_pollutant, selected_station, start_index, window_size)
         
         df_true_window_all['min_all_stations'] = df_true_window_all[true_cols_all_stations].min(axis=1)
         
-        fig3.add_trace(go.Scatter(
+        fig4.add_trace(go.Scatter(
             x=df_true_window_all['timestamp'],
             y=df_true_window_all['min_all_stations'],
             mode='lines',
@@ -317,7 +383,7 @@ def update_plots(selected_pollutant, selected_station, start_index, window_size)
             df_forecast['timestamp'] = pd.to_datetime(df_forecast['timestamp'])
             
             # Shift timestamp to get the actual time the forecast is for
-            time_shift = pd.Timedelta(hours=-hour)
+            time_shift = pd.Timedelta(hours=-hour + 1)
             df_forecast['target_time'] = df_forecast['timestamp'] + time_shift
             
             # Filter based on the target_time being in the window
@@ -329,7 +395,7 @@ def update_plots(selected_pollutant, selected_station, start_index, window_size)
                 # Calculate min across all stations for this forecast hour
                 df_window['pred_min_all_stations'] = df_window[pred_cols_all_stations].min(axis=1)
                 
-                fig3.add_trace(go.Scatter(
+                fig4.add_trace(go.Scatter(
                     x=df_window['target_time'],
                     y=df_window['pred_min_all_stations'],
                     mode='lines',
@@ -337,15 +403,14 @@ def update_plots(selected_pollutant, selected_station, start_index, window_size)
                     line=dict(color=colors[i], width=1)
                 ))
     
-    fig3.update_layout(
+    fig4.update_layout(
         title=f'{selected_pollutant.upper()} - Min Values Across All Stations',
         xaxis_title='Timestamp',
         yaxis_title='Min Concentration',
-        legend_title='Forecast Hour',
-        height=600
+        legend_title='Forecast Hour'
     )
     
-    figures.append(dcc.Graph(figure=fig3))
+    figures.append(dcc.Graph(figure=fig4))
     
     return figures
 
@@ -360,4 +425,4 @@ def update_time_slider_properties(window_size):
     return max_val, label
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=8063)

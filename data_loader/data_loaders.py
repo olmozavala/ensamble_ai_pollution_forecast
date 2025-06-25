@@ -58,6 +58,7 @@ class MLforecastDataset(Dataset):
         self.prev_weather_hours = prev_weather_hours
         self.next_weather_hours = next_weather_hours
         self.auto_regresive_steps = auto_regresive_steps
+        self.pollutants_to_keep = pollutants_to_keep
 
         self.data = {}
         if not os.path.exists(pollution_data_file) or not os.path.exists(weather_data_file):
@@ -123,23 +124,65 @@ class MLforecastDataset(Dataset):
             self.pollution_data = pd.read_pickle(pollution_data_file)
             self.weather_data = pd.read_pickle(weather_data_file)
 
-        # ======================== Getting names and indices of the columns ========================
-        # Get both the indices and column names for pollutant columns
+        # ======================== Replacing all pollutants columns with the mean of the stations ========================(except otres) 
         self.pollutant_columns = [col for col in self.pollution_data.columns if col.startswith('cont_')]
-        self.pollutant_columns_idx = [self.pollution_data.columns.get_loc(col) for col in self.pollutant_columns]
-        # Get the columns and names of the time related inputs
-        self.time_related_columns = [col for col in self.pollution_data.columns if col.endswith(('day', 'week', 'year'))]
-        self.time_related_columns_idx = [self.pollution_data.columns.get_loc(col) for col in self.time_related_columns]
+        # Calculate mean value for each pollutant across all stations, except otres
+        pollutant_means = {}
+        otres_columns = []
+        for pollutant in self.pollutants_to_keep:
+            # Get all columns for this pollutant across stations
+            pollutant_cols = [col for col in self.pollutant_columns if f'cont_{pollutant}_' in col]
+            
+            if pollutant == 'otres':
+                # For otres, keep original columns
+                otres_columns = pollutant_cols
+            else:
+                # For other pollutants, calculate mean across stations
+                pollutant_mean = self.pollution_data[pollutant_cols].mean(axis=1)
+                mean_col_name = f'cont_{pollutant}_mean'
+                pollutant_means[mean_col_name] = pollutant_mean
+            
+        # Create new dataframe with mean values
+        mean_pollution_df = pd.DataFrame(pollutant_means)
+        
+        # Drop all pollutant columns except otres
+        cols_to_drop = [col for col in self.pollutant_columns if col not in otres_columns]
+        self.pollution_data = self.pollution_data.drop(columns=cols_to_drop)
+        
+        # Add the mean columns for non-otres pollutants
+        self.pollution_data = pd.concat([self.pollution_data, mean_pollution_df], axis=1)
+
+        # ======================== Dropping the imputed columns from the pollution data (except otres) ========================
         # Select the imputed columns names and indeces that start with 'i_cont_' (imputed continuous pollutants)
+        self.imputed_mask_columns = [col for col in self.pollution_data.columns if col.startswith('i_cont_') and 'otres' not in col]
+        # Save the imputed columns to a separate dataframe (it keeps the imputed columns)
+        self.pollutant_imputed_data = self.pollution_data[self.imputed_mask_columns] # Pollutants only data
+        # Remove the imputed columns from the pollution data (it keeps the pollutant column and the time related columns)
+        self.pollution_data = self.pollution_data.drop(columns=self.imputed_mask_columns) # Pollutants and time related columns
+        # Get the updated imputed columns names
         self.imputed_mask_columns = [col for col in self.pollution_data.columns if col.startswith('i_cont_')]
-        self.imputed_mask_columns_idx = [self.pollution_data.columns.get_loc(col) for col in self.imputed_mask_columns]
+        self.imputed_mask_columns_idx = [i for i, col in enumerate(self.pollution_data.columns) if col.startswith('i_cont_')]
 
         # ======================== Dropping the imputed columns from the pollution data ========================
         # Save the imputed columns to a separate dataframe
+        self.pollutant_columns = [col for col in self.pollution_data.columns if col.startswith('cont_')]
         self.pollutant_imputed_data = self.pollution_data[self.imputed_mask_columns]
         # Remove the imputed columns from the pollution data (it keeps the pollutant column and the time related columns)
         self.x_input_data = self.pollution_data.drop(columns=self.imputed_mask_columns) # Pollutants and time related columns
         self.y_output_data = self.pollution_data[self.pollutant_columns] # Pollutants only data    
+
+        # ======================== Getting names and indices of the columns for the input data ========================
+        # Get both the indices and column names for pollutant columns
+        self.pollutant_columns = [col for col in self.x_input_data.columns if col.startswith('cont_')]
+        self.pollutant_columns_idx = [self.x_input_data.columns.get_loc(col) for col in self.pollutant_columns]
+        # Get the columns and names of the time related inputs
+        self.time_related_columns = [col for col in self.x_input_data.columns if col.endswith(('day', 'week', 'year'))]
+        self.time_related_columns_idx = [self.x_input_data.columns.get_loc(col) for col in self.time_related_columns]
+
+        # ======================== Getting names and indices of the target columns ========================
+        # This has to be done after y_output_data is defined
+        self.target_columns = self.y_output_data.columns
+        self.target_columns_idx = [self.y_output_data.columns.get_loc(col) for col in self.target_columns]
             
         self.total_dates: int = len(self.pollution_data)
         self.dates = self.pollution_data.index
@@ -154,6 +197,8 @@ class MLforecastDataset(Dataset):
             return self.imputed_mask_columns, self.imputed_mask_columns_idx
         elif column_type == "time":
             return self.time_related_columns, self.time_related_columns_idx
+        elif column_type == "target":
+            return self.target_columns, self.target_columns_idx
         else:
             raise ValueError(f"Invalid column type: {column_type}")
 
@@ -284,11 +329,11 @@ if __name__ == '__main__':
     norm_params_file = join(training_folder, f"norm_params_{start_year}_to_{end_year}.pkl")
     pollutants_to_keep = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco']
     # Data loader parameters
-    batch_size = 8
-    prev_pollutant_hours = 24
-    prev_weather_hours = 24
-    next_weather_hours = 1
-    auto_regresive_steps = 10
+    batch_size = 2
+    prev_pollutant_hours = 16 
+    prev_weather_hours = 4
+    next_weather_hours = 2
+    auto_regresive_steps = 4
 
     # Print the paramters
     print(f"Batch size: {batch_size}")
@@ -317,10 +362,10 @@ if __name__ == '__main__':
     )
     
     # Test loading a batch
-
     pollution_column_names, pollution_column_indices = data_loader.get_pollution_column_names_and_indices("pollutant_only")
     imputed_mask_columns, imputed_mask_columns_indices = data_loader.get_pollution_column_names_and_indices("imputed_mask")
     time_related_columns, time_related_columns_indices = data_loader.get_pollution_column_names_and_indices("time")
+    target_columns, target_columns_indices = data_loader.get_pollution_column_names_and_indices("target")
 
     # Print the time related columns
     print(f"Time related columns: {time_related_columns}")
@@ -329,31 +374,49 @@ if __name__ == '__main__':
     for batch_idx, batch in enumerate(data_loader):
         # Print the shape of each element in the batch (x, y)
         print(f"Batch {batch_idx}")
-        print(f"  x pollution shape: {batch[0][0].shape} (batch, prev_pollutant_hours, stations*contaminants + time related columns)")
+        print(f"  x pollution shape: {batch[0][0].shape} (batch, prev_pollutant_hours, stations*1(ozone) + (contaminants - 1)(means) + time related columns)")
         print(f"  x weather shape: {batch[0][1].shape} (batch, prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)")
-        print(f"  y pollution shape: {batch[1][0].shape} (batch, auto_regresive_steps, stations*contaminants)")
-        print(f"  y imputed pollution shape: {batch[1][1].shape} (batch, auto_regresive_steps, stations*contaminants)")
+        print(f"  y pollution shape: {batch[1][0].shape} (batch, auto_regresive_steps, stations*1(ozone) + (contaminants - 1)(means))")
+        print(f"  y imputed pollution shape: {batch[1][1].shape} (batch, auto_regresive_steps, stations*1(ozone))")
 
         # Here we can plot the data to be sure that the data is loaded correctly
-        pollution_data = batch[0][0].numpy()[0,:,:]  # Final shape is (prev_pollutant_hours, stations*contaminants + time related columns)
+        pollution_data = batch[0][0].numpy()[0,:,:]  # Final shape is (prev_pollutant_hours, stations*1(ozone) + contaminants + time related columns)
         weather_data = batch[0][1].numpy()[0,:,:,:,:]  # Final shape is (prev_weather_hours + next_weather_hours + auto_regresive_steps + 1, fields, lat, lon)
-        target_data = batch[1][0].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
-        imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*contaminants)
+        target_data = batch[1][0].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*1(ozone) + (contaminants - 1)(means))
+        imputed_data = batch[1][1].numpy()[0,:,:]  # Final shape is (auto_regresive_steps, stations*1(ozone))
         current_datetime = pd.to_datetime(batch[2][0].item(), unit='s')
 
         # Plot the pollution data
-        # Find all indices that contain "otres" in the name
-        contaminant_name = "pmdiez"  # To plot multiple stations
-        # contaminant_name = "cont_otres_MER"  # To plot a single station
-        weather_var_idx = 0
-        weather_var_name = "T2"
-        plot_pollutant_indices = [i for i, name in enumerate(pollution_column_names) if contaminant_name in name]
-        
-        # Create figure to plot pollution data features
-        output_folder = "/home/olmozavala/DATA/AirPollution/TrainingData/batch_imgs"
-        visualize_batch_data(pollution_data, target_data, imputed_data, weather_data, 
-                             plot_pollutant_indices, pollution_column_names, time_related_columns, time_related_columns_indices, weather_var_name, 
-                             current_datetime, output_folder, batch_idx, prev_weather_hours, next_weather_hours, 
-                             auto_regresive_steps, weather_var_idx, contaminant_name)
-        if batch_idx > 5:
+        # contaminant_names = ["otres", "pmdiez", "nodos", "co", "pmdoscinco"]  # To plot multiple stations
+        contaminant_names = ["co"]  # To plot multiple stations
+        for contaminant_name in contaminant_names:
+            # contaminant_name = "cont_otres_MER"  # To plot a single station
+            weather_var_idx = 0
+            weather_var_name = "T2"
+            plot_pollutant_names = [name for name in pollution_column_names if contaminant_name == name.split('_')[1]]
+            plot_pollutant_indices = [pollution_column_indices[i] for i, name in enumerate(pollution_column_names) if contaminant_name == name.split('_')[1]]
+            plot_target_indices = [target_columns_indices[i] for i, name in enumerate(target_columns) if contaminant_name == name.split('_')[1]]
+            
+            # Create figure to plot pollution data features
+            output_folder = "/home/olmozavala/DATA/AirPollution/TrainingData/batch_imgs"
+            visualize_batch_data(pollution_data, 
+                                target_data, 
+                                imputed_data, 
+                                weather_data, 
+                                plot_pollutant_indices, 
+                                plot_pollutant_names, 
+                                target_columns, 
+                                plot_target_indices, 
+                                time_related_columns, 
+                                time_related_columns_indices, 
+                                weather_var_name, 
+                                current_datetime, 
+                                output_folder, 
+                                batch_idx, 
+                                prev_weather_hours, 
+                                next_weather_hours, 
+                                auto_regresive_steps, 
+                                weather_var_idx, 
+                                contaminant_name)
+        if batch_idx > 1:
             break

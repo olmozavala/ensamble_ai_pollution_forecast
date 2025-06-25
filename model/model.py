@@ -57,11 +57,10 @@ class MultiStreamTransformerModel(BaseModel):
                  weather_time_dims: int,
                  pollution_time_dims: int,
                  weather_fields: int,
-                 pollution_features: int,
+                 input_features: int,
                  weather_embedding_size: int,
                  pollution_embedding_size: int,
                  attention_heads: int,
-                 output_size: int,
                  lat_size: int,
                  lon_size: int,
                  dropout: float = 0.1,
@@ -69,15 +68,19 @@ class MultiStreamTransformerModel(BaseModel):
                  pollution_transformer_blocks: int = 2):
         super().__init__()
 
+        # ======================== Getting the output size ========================
+        # Get the number of pollutants to predict
+        self.output_size = input_features - 12 # 12 is the number of time related features
+
         print("Buidling MultiStreamTransformerModel...")
         print(f"weather_time_dims: {weather_time_dims}")
         print(f"pollution_time_dims: {pollution_time_dims}")
         print(f"weather_fields: {weather_fields}")
-        print(f"pollution_features: {pollution_features}")
+        print(f"input_features: {input_features}")
         print(f"weather_embedding_size: {weather_embedding_size}")
         print(f"pollution_embedding_size: {pollution_embedding_size}")
         print(f"attention_heads: {attention_heads}")
-        print(f"output_size: {output_size}")
+        print(f"output_size: {self.output_size}")
         print(f"weather_transformer_blocks: {weather_transformer_blocks}")
         print(f"pollution_transformer_blocks: {pollution_transformer_blocks}")
 
@@ -100,7 +103,7 @@ class MultiStreamTransformerModel(BaseModel):
         ])
         
         # Pollution branch
-        self.pollution_embedding = nn.Linear(pollution_features, pollution_embedding_size)
+        self.pollution_embedding = nn.Linear(input_features, pollution_embedding_size)
         self.pollution_pos_encoding = nn.Parameter(
             torch.randn(pollution_time_dims, pollution_embedding_size)
         )
@@ -128,7 +131,7 @@ class MultiStreamTransformerModel(BaseModel):
             nn.BatchNorm1d(merged_size // 8),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(merged_size // 8, output_size)
+            nn.Linear(merged_size // 8, self.output_size)
         )
 
     def forward(self, weather_data, pollution_data):
@@ -229,8 +232,7 @@ if __name__ == "__main__":
     lat_size = 25
     lon_size = 25
     pollution_time_steps = 24
-    pollution_features = 146
-    output_size = 24  # Predicting 24 hours ahead
+    input_features = 46
     patch_size = 5    # 5x5 patches
     embedding_dim = 64
     num_heads = 4
@@ -239,18 +241,17 @@ if __name__ == "__main__":
     
     # Create synthetic input data
     weather_data = torch.randn(batch_size, weather_time_steps, weather_fields, lat_size, lon_size)
-    pollution_data = torch.randn(batch_size, pollution_time_steps, pollution_features)
+    pollution_data = torch.randn(batch_size, pollution_time_steps, input_features)
     
     # %% Initialize model
     model = MultiStreamTransformerModel(
         weather_time_dims=weather_time_steps,
         pollution_time_dims=pollution_time_steps,
         weather_fields=weather_fields,
-        pollution_features=pollution_features,
+        input_features=input_features,
         weather_embedding_size=embedding_dim,
         pollution_embedding_size=embedding_dim,
         attention_heads=num_heads,
-        output_size=output_size,
         lat_size=lat_size,
         lon_size=lon_size,
         dropout=dropout

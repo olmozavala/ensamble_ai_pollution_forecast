@@ -30,7 +30,6 @@ def visualize_pollutant_vs_weather_var(pollution_data: DataFrame,
     # average of T2M from weather
     ozone = pollution_data.iloc[hours_to_plot][pollutant_col]
     temp = weather_data[weather_var][hours_to_plot].mean(dim=['lat', 'lon'])
-    current_imputed_hours = imputed_hours.iloc[hours_to_plot][f"i_{pollutant_col}"]
 
     # Create figure with two y-axes
     fig, ax1 = plt.subplots(figsize=(12, 6))
@@ -43,6 +42,7 @@ def visualize_pollutant_vs_weather_var(pollution_data: DataFrame,
 
     # If imputed_hours is not None, plot the imputed hours as scatter plot
     if imputed_hours is not None:
+        current_imputed_hours = imputed_hours.iloc[hours_to_plot][f"i_{pollutant_col}"]
         ax1.scatter(current_imputed_hours.index, current_imputed_hours.to_numpy(), color='blue', label='Imputed', s=20)
         ax1.tick_params(axis='y', labelcolor='blue')
     
@@ -77,7 +77,9 @@ def visualize_batch_data( pollution_data: np.ndarray,
                                             imputed_data: np.ndarray,
                                             weather_data: np.ndarray,
                                             plot_pollutant_indices: list,
-                                            pollution_column_names: list,
+                                            plot_pollutant_names: list,
+                                            target_columns: list,
+                                            target_columns_indices: list,
                                             time_related_columns: list,
                                             time_related_indices: list,
                                             weather_var_name: str,
@@ -99,7 +101,9 @@ def visualize_batch_data( pollution_data: np.ndarray,
         imputed_data (np.ndarray): Imputed pollution data of shape (auto_regresive_steps, num_features)
         weather_data (np.ndarray): Weather data of shape (timesteps, fields, lat, lon)
         plot_pollutant_indices (list): Indices of pollutants to plot
-        pollution_column_names (list): Names of pollution data columns
+        plot_pollutant_names (list): Names of pollution data columns
+        target_columns (list): Names of target columns
+        target_columns_indices (list): Indices of target columns
         time_related_columns (list): Names of time related columns to plot
         time_related_indices (list): Indices of time related columns to plot
         weather_var_name (str): Name of weather variable to plot
@@ -117,18 +121,19 @@ def visualize_batch_data( pollution_data: np.ndarray,
     2. Spatial maps of weather data for each timestep
     """
 
+    # First plot the pollution data
     fig, axs = plt.subplots(figsize=(15, 8))
     axs.plot(pollution_data[:, plot_pollutant_indices])
-    axs.set_title('Pollution Data - Otres')
+    axs.set_title(f'Pollution Data - {contaminant_name}')
     axs.set_xlabel('Hour') 
-    axs.legend([pollution_column_names[i] for i in plot_pollutant_indices])
+    axs.legend(plot_pollutant_names)
     # Include the target data
     for i in range(len(plot_pollutant_indices)):
         x_range = range(pollution_data.shape[0], pollution_data.shape[0] + target_data.shape[0])
-        axs.plot(x_range, target_data[:, plot_pollutant_indices[i]], color='red', label='Target' if i == 0 else None)
+        axs.plot(x_range, target_data[:, target_columns_indices[i]], color='red', label='Target' if i == 0 else None)
     # Finally include the imputed data
-    axs.scatter([range(pollution_data.shape[0], pollution_data.shape[0] + target_data.shape[0]) for _ in range(len(plot_pollutant_indices))],
-                imputed_data[:, plot_pollutant_indices], color='blue', label='Imputed')
+    # axs.scatter([range(pollution_data.shape[0], pollution_data.shape[0] + target_data.shape[0]) for _ in range(len(plot_pollutant_indices))],
+                # imputed_data[:, plot_pollutant_indices], color='blue', label='Imputed')
     # Include the average of the weather data
     axs.scatter(range(pollution_data.shape[0] - prev_weather_hours - 1, pollution_data.shape[0] + next_weather_hours + auto_regresive_steps - 1), 
                 weather_data[:, weather_var_idx, :, :].mean(axis=(1,2)), color='black', label=weather_var_name)
