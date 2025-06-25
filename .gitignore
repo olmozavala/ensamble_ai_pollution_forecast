@@ -12,7 +12,6 @@ imgs/
 # runs, saved, tests
 runs/
 saved/
-tests/
 
 # C extensions
 *.so

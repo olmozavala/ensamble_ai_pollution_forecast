@@ -1,6 +1,6 @@
 {
     "name": "BaselineAllPollutantsPrev16HoursPrev4WeatherHoursNext2WeatherHoursAutoRegressive24",
-    "n_gpu": 4,
+    "n_gpu": 1,
 
     "arch": {
         "type": "MultiStreamTransformerModel",
@@ -22,8 +22,8 @@
     "data_loader": {
         "type": "MLforecastDataLoader",
         "args": {
-            "data_folder": "/unity/f1/ozavala/DATA/AirPollution",
-            "norm_params_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
+            "data_folder": "/home/olmozavala/DATA/AirPollution",
+            "norm_params_file": "/home/olmozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
             "years": [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022],
             "pollutants_to_keep": ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"],
             "prev_pollutant_hours": 16,
@@ -33,7 +33,7 @@
             "bootstrap_enabled": true,
             "bootstrap_repetition": 20,
             "bootstrap_threshold": 3.0,
-            "batch_size": 2048,
+            "batch_size": 1024,
             "shuffle": true,
             "validation_split": 0.1,
             "num_workers": 4
@@ -41,7 +41,7 @@
     },
     "trainer": {
         "epochs": 3000,
-        "save_dir": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/",
+        "save_dir": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/",
         "save_period": 1,
         "verbosity": 2,
         "monitor": "min val_loss",
@@ -75,10 +75,10 @@
         }
     },
     "test": {
-        "model_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/models/MeanPollutantsNewCSVFilesImputedWithClimatologyBootstrap3/0625_072008",
+        "model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/models/MeanPollutantsNewCSVFilesImputedWithClimatologyBootstrap3/0625_072008",
         "visualize_batch": false,
-        "prediction_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/predictions",
-        "denormalization_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
+        "prediction_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/predictions",
+        "denormalization_file": "/home/olmozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
         "data_loader": {
             "years": [2023],
             "batch_size": 128,
@@ -88,14 +88,14 @@
             "auto_regresive_steps": 24
         },
         "visualize":{
-            "output_folder": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/imgs",
+            "output_folder": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/imgs",
             "weather_var_idx": 0,
             "contaminant_name": "co",
             "weather_var_name": "T2"
         }
     },
     "analyze": {
-        "single_model_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/predictions/MeanPollutantsNewCSVFilesImputedWithClimatologyBootstrap3AutoRegressive24/0625_072008",
-        "output_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/analysis"
+        "single_model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/predictions/MeanPollutantsNewCSVFilesImputedWithClimatologyBootstrap3AutoRegressive24/0625_072008",
+        "output_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/analysis"
     }
 }
