@@ -95,7 +95,6 @@
         }
     },
     "analyze": {
-        "prediction_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/predictions/MeanPollutantsNewCSVFilesImputedWithClimatologyBootstrap3AutoRegressive24/0625_072008",
         "single_model_path": "/home/olmozavala/DATA/AirPollution/OUTPUT/predictions/MeanPollutantsNewCSVFilesImputedWithClimatologyBootstrap3AutoRegressive24/0625_072008",
         "output_path": "/LUSTRE/HOME/olmozavala/DATA/AirPollution/OUTPUT/analysis"
     }
