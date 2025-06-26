@@ -86,6 +86,13 @@ class Trainer(BaseTrainer):
                 new_target = (y_pollution_data, y_mask_data)
 
                 output = self.model(cur_weather_input, cur_x_pollution_data)
+                
+                # Check if output contains NaN values and stop training if it does
+                if torch.isnan(output).any():
+                    self.logger.error(f"NaN detected in model output at epoch {epoch}, batch {batch_idx}, predicted_hour {predicted_hour}")
+                    self.logger.error(f"Output shape: {output.shape}, Output: {output}")
+                    raise ValueError("Training stopped due to NaN values in model output")
+                
                 loss = self.criterion(output, new_target)
                 total_loss += loss
 
@@ -179,6 +186,13 @@ class Trainer(BaseTrainer):
                     new_target = (y_pollution_data, y_mask_data)
 
                     output = self.model(cur_weather_input, cur_x_pollution_data)
+                    
+                    # Check if output contains NaN values and stop training if it does
+                    if torch.isnan(output).any():
+                        self.logger.error(f"NaN detected in model output at epoch {epoch}, batch {batch_idx}, predicted_hour {predicted_hour}")
+                        self.logger.error(f"Output shape: {output.shape}, Output: {output}")
+                        raise ValueError("Training stopped due to NaN values in model output")
+                    
                     loss = self.criterion(output, new_target)
                     total_loss += loss
 
