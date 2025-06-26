@@ -63,18 +63,17 @@ class ParallelTrainer:
         """
         # Define the parameter options
         param_options = {
-            'prev_pollutant_hours': [4, 8, 16, 24],
-            'attention_heads': [2, 4],
-            'weather_transformer_blocks': [3, 5],
-            'pollution_transformer_blocks': [3, 5],
+            'prev_pollutant_hours': [8, 24],
+            'attention_heads': [4],
+            'weather_transformer_blocks': [5],
+            'pollution_transformer_blocks': [5],
             'pollutants_to_keep': [
-                ["otres"],
-                ["otres", "nox", "no"],
-                ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"]  # all
+                ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"],  # all
+                ["otres"],  # only otres
             ],
             'bootstrap_enabled': [True, False],
-            'bootstrap_threshold': [2, 3],
-            'auto_regresive_steps': [4, 8, 16, 24]
+            'bootstrap_threshold': [2],
+            'auto_regresive_steps': [8, 24]
         }
         
         # Generate all combinations
@@ -113,6 +112,10 @@ class ParallelTrainer:
         config['arch']['args']['weather_transformer_blocks'] = params['weather_transformer_blocks']
         config['arch']['args']['pollution_transformer_blocks'] = params['pollution_transformer_blocks']
         
+        # Compute input_features dynamically based on pollutants_to_keep
+        input_features = 30 + (len(params['pollutants_to_keep']) - 1) * 3 + 12
+        config['arch']['args']['input_features'] = input_features
+        
         # Update data loader parameters
         config['data_loader']['args']['prev_pollutant_hours'] = params['prev_pollutant_hours']
         config['data_loader']['args']['pollutants_to_keep'] = params['pollutants_to_keep']
@@ -122,9 +125,6 @@ class ParallelTrainer:
         
         # Update trainer parameters
         config['trainer']['auto_regresive_steps'] = params['auto_regresive_steps']
-        
-        # Update test parameters
-        config['test']['data_loader']['auto_regresive_steps'] = params['auto_regresive_steps']
         
         # Update model name to reflect parameters
         pollutants_str = "_".join(params['pollutants_to_keep'][:3])  # First 3 pollutants
@@ -174,7 +174,7 @@ class ParallelTrainer:
             logger.info(f"Starting training for {config_name} on GPU {gpu_id}")
             
             # Run the training script
-            cmd = ['python', '4_train.py', '-c', config_path]
+            cmd = ['.venv/bin/python', '4_train.py', '-c', config_path]
             result = subprocess.run(
                 cmd,
                 env=env,

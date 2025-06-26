@@ -37,6 +37,9 @@ config = ConfigParser.from_args(args, options)
 # %%
 logger = config.get_logger('train')
 
+# Override test data loader's auto_regressive_steps to always be 24
+config.config['test']['data_loader']['auto_regresive_steps'] = 24
+
 # Log the batch_size, the auto_regressive_steps, the learning rate, the metrics, the loss function, the optimizer, the lr_scheduler, the model, the device, the data_loader, the valid_data_loader, the trainer
 logger.info(f"Batch Size: {config['data_loader']['args']['batch_size']}")
 logger.info(f"AutoRegressiveSteps: {config['trainer']['auto_regresive_steps']}")

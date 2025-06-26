@@ -8,6 +8,7 @@ import argparse
 from parse_config import ConfigParser
 import numpy as np
 from typing import List, Dict, Optional, Tuple
+import glob
 
 # --- CONFIG FROM ARGPARSE/CONFIG FILE ---
 args = argparse.ArgumentParser(description='Air Pollution Dashboard')
@@ -19,8 +20,52 @@ args.add_argument('-d', '--device', default=None, type=str,
                   help='indices of GPUs to enable (default: all)')
 config = ConfigParser.from_args(args)
 
-# Use single_model_path instead of prediction_path
-SINGLE_MODEL_PATH = config['analyze']['single_model_path']
+# Use prediction_path to discover available models (where CSV files are actually stored)
+PREDICTION_PATH = config['test']['prediction_path']
+
+def discover_available_models(all_models_path: str) -> List[Tuple[str, str]]:
+    """
+    Discover all available models in the all_models_path.
+    Looks two levels deep and combines folder names for model identification.
+    
+    Args:
+        all_models_path: Path to the directory containing model subfolders
+        
+    Returns:
+        List of tuples (model_name, model_path) for all available models
+    """
+    if not os.path.exists(all_models_path):
+        raise ValueError(f"All models path does not exist: {all_models_path}")
+    
+    available_models = []
+    
+    # Get all first-level subdirectories
+    first_level_folders = [f for f in os.listdir(all_models_path) 
+                          if os.path.isdir(os.path.join(all_models_path, f))]
+    
+    print(f"Found {len(first_level_folders)} first-level folders: {first_level_folders}")
+    
+    for first_level_folder in first_level_folders:
+        first_level_path = os.path.join(all_models_path, first_level_folder)
+        
+        # Get all second-level subdirectories
+        second_level_folders = [f for f in os.listdir(first_level_path) 
+                               if os.path.isdir(os.path.join(first_level_path, f))]
+        
+        print(f"  Found {len(second_level_folders)} second-level folders in {first_level_folder}: {second_level_folders}")
+        
+        for second_level_folder in second_level_folders:
+            # Create combined model name
+            model_name = f"{first_level_folder}_{second_level_folder}"
+            model_path = os.path.join(first_level_path, second_level_folder)
+            
+            # Check if this model has CSV files
+            csv_files = glob.glob(os.path.join(model_path, "*.csv"))
+            if csv_files:
+                available_models.append((model_name, model_path))
+                print(f"  Model {model_name} has {len(csv_files)} CSV files")
+    
+    return available_models
 
 def load_data_from_single_model(model_path: str) -> pd.DataFrame:
     """
@@ -170,7 +215,7 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
             line=dict(color='red', width=2, dash='dash')
         ))
 
-    # Plot Predicted Values for all forecast hours, shifted to align
+    # Plot Predicted Values vs True Values for all forecast hours, shifted to align
     pred_col = f'pred_cont_{pollutant}_{selected_station}'
     if pred_col in data.columns:
         colors = [f'hsl({int(h)}, 80%, 50%)' for h in np.linspace(0, 330, len(forecast_hours))]
@@ -237,7 +282,7 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
             df_forecast['timestamp'] = pd.to_datetime(df_forecast['timestamp'])
             
             # Shift timestamp to get the actual time the forecast is for
-            time_shift = pd.Timedelta(hours=-hour)
+            time_shift = pd.Timedelta(hours=-hour + 1)
             df_forecast['target_time'] = df_forecast['timestamp'] + time_shift
             
             # Filter based on the target_time being in the window
@@ -297,7 +342,7 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
             df_forecast['timestamp'] = pd.to_datetime(df_forecast['timestamp'])
             
             # Shift timestamp to get the actual time the forecast is for
-            time_shift = pd.Timedelta(hours=-hour + 1)
+            time_shift = pd.Timedelta(hours=-hour)
             df_forecast['target_time'] = df_forecast['timestamp'] + time_shift
             
             # Filter based on the target_time being in the window
@@ -561,16 +606,31 @@ def create_aggregated_plots(data: pd.DataFrame, pollutant: str, start_time: pd.T
     
     return figures
 
-# %% Load data from single model path
-print(f"Loading data from: {SINGLE_MODEL_PATH}")
-data = load_data_from_single_model(SINGLE_MODEL_PATH)
+# %% Discover available models and load initial data
+print(f"Discovering models in: {PREDICTION_PATH}")
+available_models = discover_available_models(PREDICTION_PATH)
+
+if not available_models:
+    print("No models found. Please check the prediction_path.")
+    exit(1)
+
+print(f"Found {len(available_models)} available models")
+
+# Load data from the first available model as default
+default_model_name, default_model_path = available_models[0]
+print(f"Loading default model: {default_model_name}")
+data = load_data_from_single_model(default_model_path)
+
+# Store available models for the dropdown
+model_options = [{'label': model_name, 'value': model_name} for model_name, _ in available_models]
+model_paths = {model_name: model_path for model_name, model_path in available_models}
 
 # %%
-# Get pollutants and analyze data availability
+# Get pollutants and analyze data availability for the default model
 pollutants = list(set(col.split('_')[-2] for col in data.columns if col.startswith('target_cont_')))
 print(f"Available pollutants: {pollutants}")
 
-# Analyze data availability for each pollutant
+# Analyze data availability for each pollutant (for the default model)
 pollutant_availability = {}
 for pollutant in pollutants:
     pollutant_availability[pollutant] = analyze_data_availability(data, pollutant)
@@ -579,41 +639,52 @@ for pollutant in pollutants:
         if key not in ['target_station_cols', 'pred_station_cols']:
             print(f"  {key}: {value}")
 
-# Get time range
+# Get time range for the default model
 min_hour = data['predicted_hour'].min()
 max_hour = data['predicted_hour'].max()
 
-# Get timestamps (assume all CSVs have the same timestamps)
+# Get timestamps for the default model (assume all CSVs have the same timestamps)
 timestamps = pd.to_datetime(data['timestamp'].unique())
 
 # %% --- DASH APP ---
 app = dash.Dash(__name__)
 
-# Get unique forecast hours for the dropdown
+# Get unique forecast hours for the default model
 forecast_hours = sorted(data['predicted_hour'].unique())
 
-# Create layout with conditional station dropdown
+# Create layout with model selection dropdown
 app.layout = html.Div([
     html.H1('Air Pollution Prediction Dashboard'),
     html.Div([
         html.Div([
-            html.Label('Pollutant:'),
+            html.Label('Model:'),
             dcc.Dropdown(
-                id='pollutant-dropdown',
-                options=[{'label': p, 'value': p} for p in pollutants],
-                value='otres' if 'otres' in pollutants else (pollutants[0] if pollutants else None),
+                id='model-dropdown',
+                options=model_options,
+                value=default_model_name,
                 clearable=False
             ),
-        ], style={'width': '49%', 'display': 'inline-block'}),
+        ], style={'width': '100%', 'marginBottom': '20px'}),
         html.Div([
-            html.Label('Station:'),
-            dcc.Dropdown(
-                id='station-dropdown',
-                options=[],  # Will be populated based on selected pollutant
-                value=None,
-                clearable=False
-            ),
-        ], style={'width': '49%', 'display': 'inline-block', 'float': 'right'}),
+            html.Div([
+                html.Label('Pollutant:'),
+                dcc.Dropdown(
+                    id='pollutant-dropdown',
+                    options=[{'label': p, 'value': p} for p in pollutants],
+                    value='otres' if 'otres' in pollutants else (pollutants[0] if pollutants else None),
+                    clearable=False
+                ),
+            ], style={'width': '49%', 'display': 'inline-block'}),
+            html.Div([
+                html.Label('Station:'),
+                dcc.Dropdown(
+                    id='station-dropdown',
+                    options=[],  # Will be populated based on selected pollutant
+                    value=None,
+                    clearable=False
+                ),
+            ], style={'width': '49%', 'display': 'inline-block', 'float': 'right'}),
+        ], style={'width': '80%', 'margin': 'auto'}),
     ], style={'width': '80%', 'margin': 'auto'}),
     
     html.Div([
@@ -654,68 +725,136 @@ app.layout = html.Div([
 ])
 
 @app.callback(
-    Output('station-dropdown', 'options'),
-    Output('station-dropdown', 'value'),
-    [Input('pollutant-dropdown', 'value')]
+    [Output('pollutant-dropdown', 'options'),
+     Output('pollutant-dropdown', 'value'),
+     Output('station-dropdown', 'options'),
+     Output('station-dropdown', 'value')],
+    [Input('model-dropdown', 'value'),
+     Input('pollutant-dropdown', 'value')]
 )
-def update_station_dropdown(selected_pollutant):
-    """Update station dropdown based on selected pollutant."""
-    if not selected_pollutant:
-        return [], None
+def update_pollutant_and_station_dropdowns(selected_model, selected_pollutant):
+    """Update pollutant and station dropdowns based on selected model and pollutant."""
+    if not selected_model:
+        return [], None, [], None
     
-    availability = pollutant_availability.get(selected_pollutant, {})
+    # Load data for the selected model
+    model_path = model_paths[selected_model]
+    print(f"Loading data for model: {selected_model}")
     
-    if availability.get('has_multiple_stations', False):
-        # We have multiple stations, show station dropdown
-        stations = availability.get('stations', [])
-        options = [{'label': s, 'value': s} for s in stations]
-        value = stations[0] if stations else None
-        return options, value
-    else:
-        # No multiple stations, hide station dropdown
-        return [], None
+    try:
+        current_data = load_data_from_single_model(model_path)
+        
+        # Get pollutants for this model
+        current_pollutants = list(set(col.split('_')[-2] for col in current_data.columns if col.startswith('target_cont_')))
+        pollutant_options = [{'label': p, 'value': p} for p in current_pollutants]
+        
+        # Determine the pollutant value
+        if selected_pollutant and selected_pollutant in current_pollutants:
+            # Keep the current pollutant if it's still valid for this model
+            pollutant_value = selected_pollutant
+        else:
+            # Default to 'otres' or first available pollutant
+            pollutant_value = 'otres' if 'otres' in current_pollutants else (current_pollutants[0] if current_pollutants else None)
+        
+        # Analyze data availability for the selected pollutant
+        if pollutant_value:
+            availability = analyze_data_availability(current_data, pollutant_value)
+            if availability.get('has_multiple_stations', False):
+                stations = availability.get('stations', [])
+                station_options = [{'label': s, 'value': s} for s in stations]
+                # Keep current station if it's still valid, otherwise default to first
+                if selected_pollutant == pollutant_value and hasattr(update_pollutant_and_station_dropdowns, 'last_station'):
+                    current_station = update_pollutant_and_station_dropdowns.last_station
+                    station_value = current_station if current_station in stations else (stations[0] if stations else None)
+                else:
+                    station_value = stations[0] if stations else None
+                # Store the current station for next iteration
+                update_pollutant_and_station_dropdowns.last_station = station_value
+            else:
+                station_options = []
+                station_value = None
+                update_pollutant_and_station_dropdowns.last_station = None
+        else:
+            station_options = []
+            station_value = None
+            update_pollutant_and_station_dropdowns.last_station = None
+        
+        return pollutant_options, pollutant_value, station_options, station_value
+        
+    except Exception as e:
+        print(f"Error loading model {selected_model}: {e}")
+        return [], None, [], None
 
 @app.callback(
     Output('plots-container', 'children'),
     [Input('pollutant-dropdown', 'value'),
      Input('station-dropdown', 'value'),
      Input('time-slider', 'value'),
-     Input('window-size-slider', 'value')]
+     Input('window-size-slider', 'value'),
+     Input('model-dropdown', 'value')]
 )
-def update_plots(selected_pollutant, selected_station, start_index, window_size):
+def update_plots(selected_pollutant, selected_station, start_index, window_size, selected_model):
     """Update plots based on selected parameters and data availability."""
-    if not selected_pollutant:
+    if not selected_pollutant or not selected_model:
         return []
 
-    # Define the window from the sliders
-    start_time = timestamps[start_index]
-    end_time = start_time + pd.Timedelta(hours=window_size - 1)
-    
-    availability = pollutant_availability.get(selected_pollutant, {})
-    
-    # Determine which type of plots to create
-    if availability.get('has_multiple_stations', False) and selected_station:
-        # Create station-based plots (original 4 plots)
-        figures = create_station_based_plots(data, selected_pollutant, selected_station, 
-                                           start_time, end_time, forecast_hours)
-    else:
-        # Create aggregated plots based on available data
-        figures = create_aggregated_plots(data, selected_pollutant, start_time, 
-                                        end_time, forecast_hours, availability)
-    
-    # Convert figures to Dash Graph components
-    return [dcc.Graph(figure=fig) for fig in figures]
+    # Load data for the selected model
+    model_path = model_paths[selected_model]
+    try:
+        current_data = load_data_from_single_model(model_path)
+        
+        # Get timestamps for this model
+        current_timestamps = pd.to_datetime(current_data['timestamp'].unique())
+        
+        # Define the window from the sliders
+        start_time = current_timestamps[start_index]
+        end_time = start_time + pd.Timedelta(hours=window_size - 1)
+        
+        # Get forecast hours for this model
+        current_forecast_hours = sorted(current_data['predicted_hour'].unique())
+        
+        # Analyze data availability for the selected pollutant
+        availability = analyze_data_availability(current_data, selected_pollutant)
+        
+        # Determine which type of plots to create
+        if availability.get('has_multiple_stations', False) and selected_station:
+            # Create station-based plots (original 4 plots)
+            figures = create_station_based_plots(current_data, selected_pollutant, selected_station, 
+                                               start_time, end_time, current_forecast_hours)
+        else:
+            # Create aggregated plots based on available data
+            figures = create_aggregated_plots(current_data, selected_pollutant, start_time, 
+                                            end_time, current_forecast_hours, availability)
+        
+        # Convert figures to Dash Graph components
+        return [dcc.Graph(figure=fig) for fig in figures]
+        
+    except Exception as e:
+        print(f"Error loading model {selected_model}: {e}")
+        return []
 
 @app.callback(
     [Output('time-slider', 'max'),
      Output('time-slider-label', 'children')],
-    [Input('window-size-slider', 'value')]
+    [Input('window-size-slider', 'value'),
+     Input('model-dropdown', 'value')]
 )
-def update_time_slider_properties(window_size):
-    """Update time slider properties based on window size."""
-    max_val = len(timestamps) - window_size
-    label = f'Select Start Time ({window_size}-hour window)'
-    return max_val, label
+def update_time_slider_properties(window_size, selected_model):
+    """Update time slider properties based on window size and selected model."""
+    if not selected_model:
+        return 0, f'Select Start Time ({window_size}-hour window)'
+    
+    # Load data for the selected model to get timestamps
+    model_path = model_paths[selected_model]
+    try:
+        current_data = load_data_from_single_model(model_path)
+        current_timestamps = pd.to_datetime(current_data['timestamp'].unique())
+        max_val = len(current_timestamps) - window_size
+        label = f'Select Start Time ({window_size}-hour window)'
+        return max_val, label
+    except Exception as e:
+        print(f"Error loading model {selected_model}: {e}")
+        return 0, f'Select Start Time ({window_size}-hour window)'
 
 if __name__ == '__main__':
     app.run(debug=True, port=8072)

@@ -35,7 +35,7 @@ def main(config):
     metric_fns = [getattr(module_metric, met) for met in config['metrics']]
 
     # Use the model path from test configuration
-    model_path = join(config['test']['model_path'], 'model_best.pth')
+    model_path = join(config['test']['all_models_path'], config['test']['model_path'], 'model_best.pth')
     logger.info('Loading checkpoint: {} ...'.format(model_path))
     checkpoint = torch.load(model_path, weights_only=False)
     state_dict = checkpoint['state_dict']
