@@ -16,6 +16,19 @@ echo "From: $OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_PATH"
 echo "To: $LOCAL_PATH (local skynet)"
 echo ""
 
+# Function to ask for confirmation
+ask_confirmation() {
+    local message="$1"
+    echo ""
+    read -p "$message (y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Skipping this section."
+        return 1
+    fi
+    return 0
+}
+
 # Finally copy normalization parameter files
 OMETEOTL_NORM_PATH="/home/olmozavala/DATA/AirPollution/TrainingData"
 LOCAL_NORM_PATH="/unity/f1/ozavala/DATA/AirPollution/TrainingData"
@@ -26,35 +39,56 @@ echo "From: $OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_NORM_PATH"
 echo "To: $LOCAL_NORM_PATH (local skynet)"
 echo ""
 
-# Copy norm_params files from ometeotl to local skynet
-echo "Copying norm_params files from ometeotl to skynet..."
-rsync -avz --progress --include="*.pkl" --exclude="*" \
-    -e "ssh -p $OMETEOTL_PORT" \
-    "$OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_NORM_PATH/" \
-    "$LOCAL_NORM_PATH"
+# Ask before copying norm_params files
+if ask_confirmation "Do you want to copy normalization parameter files (*.yml)?"; then
+    # Copy norm_params files from ometeotl to local skynet
+    echo "Copying norm_params files from ometeotl to skynet..."
+    rsync -avz --progress --include="*.yml" --exclude="*" \
+        -e "ssh -p $OMETEOTL_PORT" \
+        "$OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_NORM_PATH/" \
+        "$LOCAL_NORM_PATH"
 
-if [ $? -eq 0 ]; then
-    echo "Normalization parameter files copy completed successfully!"
-else
-    echo "Normalization parameter files copy failed!"
-    exit 1
+    if [ $? -eq 0 ]; then
+        echo "Normalization parameter files copy completed successfully!"
+    else
+        echo "Normalization parameter files copy failed!"
+        exit 1
+    fi
 fi
 
+# Ask before copying training data files
+if ask_confirmation "Do you want to copy training data files (*.pkl)?"; then
+    # Copy training data files from ometeotl to local skynet
+    echo "Copying training data files from ometeotl to skynet..."
+    rsync -avz --progress --include="*.pkl" --exclude="*" \
+        -e "ssh -p $OMETEOTL_PORT" \
+        "$OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_NORM_PATH/" \
+        "$LOCAL_NORM_PATH"
 
-# Copy newer files from ometeotl to local skynet
-echo "Copying newer data_imputed_7* files from ometeotl to skynet..."
-rsync -avz --progress --include="data_imputed_7*" --exclude="*" \
-    -e "ssh -p $OMETEOTL_PORT" \
-    "$OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_PATH/" \
-    "$LOCAL_PATH"
-
-if [ $? -eq 0 ]; then
-    echo "Copy completed successfully!"
-else
-    echo "Copy failed!"
-    exit 1
+    if [ $? -eq 0 ]; then
+        echo "Training data files copy completed successfully!"
+    else
+        echo "Training data files copy failed!"
+        exit 1
+    fi
 fi
 
+# Ask before copying pollution data files
+if ask_confirmation "Do you want to copy pollution data files (data_imputed_7*)?"; then
+    # Copy newer files from ometeotl to local skynet
+    echo "Copying newer data_imputed_7* files from ometeotl to skynet..."
+    rsync -avz --progress --include="data_imputed_7*" --exclude="*" \
+        -e "ssh -p $OMETEOTL_PORT" \
+        "$OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_PATH/" \
+        "$LOCAL_PATH"
+
+    if [ $? -eq 0 ]; then
+        echo "Copy completed successfully!"
+    else
+        echo "Copy failed!"
+        exit 1
+    fi
+fi
 
 # Define paths for weather files
 OMETEOTL_WRF_PATH="/home/olmozavala/DATA/AirPollution/WRF_NetCDF"
@@ -66,17 +100,23 @@ echo "From: $OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_WRF_PATH"
 echo "To: $LOCAL_WRF_PATH (local skynet)"
 echo ""
 
-# Copy weather files from ometeotl to local skynet
-echo "Copying weather files from ometeotl to skynet..."
-rsync -avz --progress \
-    -e "ssh -p $OMETEOTL_PORT" \
-    "$OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_WRF_PATH/" \
-    "$LOCAL_WRF_PATH"
+# Ask before copying weather files
+if ask_confirmation "Do you want to copy weather files (WRF_NetCDF)?"; then
+    # Copy weather files from ometeotl to local skynet
+    echo "Copying weather files from ometeotl to skynet..."
+    rsync -avz --progress \
+        -e "ssh -p $OMETEOTL_PORT" \
+        "$OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_WRF_PATH/" \
+        "$LOCAL_WRF_PATH"
 
-if [ $? -eq 0 ]; then
-    echo "Weather files copy completed successfully!"
-else
-    echo "Weather files copy failed!"
-    exit 1
+    if [ $? -eq 0 ]; then
+        echo "Weather files copy completed successfully!"
+    else
+        echo "Weather files copy failed!"
+        exit 1
+    fi
 fi
+
+echo ""
+echo "Script completed!"
 

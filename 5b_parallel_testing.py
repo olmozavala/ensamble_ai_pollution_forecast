@@ -164,7 +164,7 @@ class ParallelTester:
                         models.append((model_name, run_folder.name, str(run_folder)))
                         logger.info(f"Found model: {model_name}/{run_folder.name}")
         
-        logger.info(f"Discovered {len(models)} trained models")
+        logger.info(f"Discovered {len(models)} trained models from {self.models_path}")
         return models
     
     def _update_config_for_testing(self, config_path: str, model_path: str) -> Dict[str, Any]:
@@ -230,7 +230,7 @@ class ParallelTester:
             logger.info(f"Starting testing for {config_name} on GPU {gpu_id}")
             
             # Run the testing script
-            cmd = ['/home/olmozavala/CODE/ensamble_ai_pollution_forecast/.venv/bin/python', '5_test.py', '-c', config_path]
+            cmd = ['./.venv/bin/python', '5_test.py', '-c', config_path]
             result = subprocess.run(
                 cmd,
                 env=env,

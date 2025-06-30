@@ -6,6 +6,11 @@ This script generates multiple configuration files with different parameter comb
 and runs training in parallel using subprocess. It takes the base config.json and creates
 variations with different hyperparameters to test.
 
+The script includes options to manipulate:
+- prev_weather_hours and next_weather_hours (affects weather_time_dims calculation)
+- prev_pollutant_hours, attention_heads, transformer blocks
+- pollutants_to_keep, bootstrap settings, auto_regressive_steps
+
 Author: AI Assistant
 Date: 2024
 """
@@ -63,17 +68,19 @@ class ParallelTrainer:
         """
         # Define the parameter options
         param_options = {
-            'prev_pollutant_hours': [8, 24],
+            'prev_pollutant_hours': [8, 24, 36],
             'attention_heads': [4],
-            'weather_transformer_blocks': [5],
-            'pollution_transformer_blocks': [5],
+            'weather_transformer_blocks': [4],
+            'pollution_transformer_blocks': [4],
             'pollutants_to_keep': [
-                ["co", "nodos", "otres", "pmdiez", "pmdoscinco"],  # all
+                ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"],  # all
                 ["otres"],  # only otres
             ],
             'bootstrap_enabled': [True, False],
             'bootstrap_threshold': [2],
-            'auto_regresive_steps': [8, 24]
+            'auto_regresive_steps': [8, 24],
+            'prev_weather_hours': [4, 8],
+            'next_weather_hours': [2]
         }
         
         # Generate all combinations
@@ -112,12 +119,18 @@ class ParallelTrainer:
         config['arch']['args']['weather_transformer_blocks'] = params['weather_transformer_blocks']
         config['arch']['args']['pollution_transformer_blocks'] = params['pollution_transformer_blocks']
         
+        # Calculate weather_time_dims as sum of prev_weather_hours + next_weather_hours + 1
+        weather_time_dims = params['prev_weather_hours'] + params['next_weather_hours'] + 1
+        config['arch']['args']['weather_time_dims'] = weather_time_dims
+        
         # Compute input_features dynamically based on pollutants_to_keep
         input_features = 30 + (len(params['pollutants_to_keep']) - 1) * 3 + 12
         config['arch']['args']['input_features'] = input_features
         
         # Update data loader parameters
         config['data_loader']['args']['prev_pollutant_hours'] = params['prev_pollutant_hours']
+        config['data_loader']['args']['prev_weather_hours'] = params['prev_weather_hours']
+        config['data_loader']['args']['next_weather_hours'] = params['next_weather_hours']
         config['data_loader']['args']['pollutants_to_keep'] = params['pollutants_to_keep']
         config['data_loader']['args']['bootstrap_enabled'] = params['bootstrap_enabled']
         config['data_loader']['args']['bootstrap_threshold'] = params['bootstrap_threshold']
@@ -131,7 +144,7 @@ class ParallelTrainer:
         if len(params['pollutants_to_keep']) > 3:
             pollutants_str += "_all"
         
-        config['name'] = f"Parallel_{pollutants_str}_prev{params['prev_pollutant_hours']}_heads{params['attention_heads']}_w{params['weather_transformer_blocks']}_p{params['pollution_transformer_blocks']}_ar{params['auto_regresive_steps']}_bootstrap{params['bootstrap_enabled']}"
+        config['name'] = f"Parallel_{pollutants_str}_prev{params['prev_pollutant_hours']}_heads{params['attention_heads']}_w{params['weather_transformer_blocks']}_p{params['pollution_transformer_blocks']}_ar{params['auto_regresive_steps']}_bootstrap{params['bootstrap_enabled']}_weather{params['prev_weather_hours']}_{params['next_weather_hours']}"
         
         return config
     
@@ -149,7 +162,7 @@ class ParallelTrainer:
         if len(params['pollutants_to_keep']) > 3:
             pollutants_str = "all_pollutants"
         
-        filename = f"parallel_{pollutants_str}_prev{params['prev_pollutant_hours']}_heads{params['attention_heads']}_w{params['weather_transformer_blocks']}_p{params['pollution_transformer_blocks']}_ar{params['auto_regresive_steps']}_bootstrap{params['bootstrap_enabled']}_thresh{params['bootstrap_threshold']}.json"
+        filename = f"parallel_{pollutants_str}_prev{params['prev_pollutant_hours']}_heads{params['attention_heads']}_w{params['weather_transformer_blocks']}_p{params['pollution_transformer_blocks']}_ar{params['auto_regresive_steps']}_bootstrap{params['bootstrap_enabled']}_thresh{params['bootstrap_threshold']}_weather{params['prev_weather_hours']}_{params['next_weather_hours']}.json"
         
         return filename
     

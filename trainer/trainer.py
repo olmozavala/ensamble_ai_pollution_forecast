@@ -177,7 +177,7 @@ class Trainer(BaseTrainer):
                 total_loss = 0.0
                 cur_x_pollution_data = x_pollution_data.clone()
                 # In this case we always predict the 'farthest' hour (be careful with comparing between models)
-                for predicted_hour in range(auto_regresive_steps):
+                for predicted_hour in range(min(8, auto_regresive_steps)):
                     # Set the current weather window input
                     cur_weather_input = x_weather_data[:, predicted_hour:predicted_hour+weather_window_size, :]
                     

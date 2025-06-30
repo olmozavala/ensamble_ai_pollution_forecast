@@ -40,8 +40,33 @@ def main(config):
     checkpoint = torch.load(model_path, weights_only=False)
     state_dict = checkpoint['state_dict']
 
+    # Check if the state dict has module prefixes (from DataParallel training)
+    has_module_prefix = any(key.startswith('module.') for key in state_dict.keys())
+    logger.info(f"State dict has module prefix: {has_module_prefix}")
+
     if config['n_gpu'] > 1:
         model = torch.nn.DataParallel(model)
+        # If state dict has module prefix and we're using DataParallel, we're good
+        if has_module_prefix:
+            logger.info("Loading DataParallel model with module-prefixed state dict")
+        else:
+            logger.info("Adding module prefix to state dict for DataParallel model")
+            from collections import OrderedDict
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                new_state_dict[f'module.{k}'] = v
+            state_dict = new_state_dict
+    else:
+        # If we're not using DataParallel but state dict has module prefix, remove it
+        if has_module_prefix:
+            logger.info("Removing module prefix from state dict for single GPU loading")
+            from collections import OrderedDict
+            new_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                name = k[7:] if k.startswith('module.') else k  # remove 'module.' prefix
+                new_state_dict[name] = v
+            state_dict = new_state_dict
+    
     model.load_state_dict(state_dict)
 
     # prepare model for testing
