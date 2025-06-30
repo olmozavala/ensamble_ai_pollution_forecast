@@ -1,5 +1,5 @@
 import os
-import pickle
+import yaml
 from typing import List, Tuple
 from pandas import DataFrame
 from xarray import Dataset
@@ -10,8 +10,16 @@ from os.path import join
 def create_normalization_data(output_file: str, pollution_data: DataFrame, weather_data: Dataset, overwrite: bool = False) -> int:
     """
     Create normalization data for pollution and weather data.
+    
+    Args:
+        output_file (str): Path to the output YAML file for normalization parameters
+        pollution_data (DataFrame): Pollution data to analyze
+        weather_data (Dataset): Weather data to analyze
+        overwrite (bool): Whether to overwrite existing file
+        
+    Returns:
+        int: 1 if file was created, 0 if file already exists and overwrite=False
     """
-
     # Get the pollutants to keep from unique values of columns that start with 'cont_'
     pollutants = list(set([col.split('_')[-2] for col in pollution_data.columns if col.startswith('cont_')]))
 
@@ -33,8 +41,8 @@ def create_normalization_data(output_file: str, pollution_data: DataFrame, weath
         mean = pollution_data[pol_columns].mean().mean()
         std = pollution_data[pol_columns].std().mean()
 
-        # Save the mean and std as a pickle file
-        norm_params['pollutants'][pollutant] = {'mean': mean, 'std': std}
+        # Save the mean and std as a YAML file
+        norm_params['pollutants'][pollutant] = {'mean': float(mean), 'std': float(std)}
 
     print("\nPollutant normalization parameters:")
     for pollutant, params in norm_params['pollutants'].items():
@@ -49,8 +57,8 @@ def create_normalization_data(output_file: str, pollution_data: DataFrame, weath
         mean = weather_data[weather_var].mean(skipna=True).values.item()
         std = weather_data[weather_var].std(skipna=True).values.item()
 
-        # Save the mean and std as a pickle file
-        norm_params['weather'][weather_var] = {'mean': mean, 'std': std}
+        # Save the mean and std as a YAML file
+        norm_params['weather'][weather_var] = {'mean': float(mean), 'std': float(std)}
 
     print("\nWeather normalization parameters:")
     for weather_var, params in norm_params['weather'].items():
@@ -58,21 +66,29 @@ def create_normalization_data(output_file: str, pollution_data: DataFrame, weath
         print(f"  Mean: {params['mean']:.4f}")
         print(f"  Std:  {params['std']:.4f}")
 
-    # Save the norm_params as a pickle file
-    with open(output_file, 'wb') as f:
-        pickle.dump(norm_params, f)
+    # Save the norm_params as a YAML file
+    with open(output_file, 'w') as f:
+        yaml.dump(norm_params, f, default_flow_style=False, indent=2)
 
     return 1
+
 
 def normalize_data(norm_params_file: str, pollution_data: DataFrame, weather_data: Dataset) -> Tuple[DataFrame, Dataset]:
     """
     Normalize the data using the normalization parameters.
+    
+    Args:
+        norm_params_file (str): Path to the YAML file containing normalization parameters
+        pollution_data (DataFrame): Pollution data to normalize
+        weather_data (Dataset): Weather data to normalize
+        
+    Returns:
+        Tuple[DataFrame, Dataset]: Normalized pollution and weather data
     """
-
     print(f"Normalizing data using {norm_params_file}...")
     # Load the normalization parameters
-    with open(norm_params_file, 'rb') as f:
-        norm_params = pickle.load(f)
+    with open(norm_params_file, 'r') as f:
+        norm_params = yaml.safe_load(f)
 
     # Normalize the data
     for pollutant in norm_params['pollutants'].keys():
@@ -100,15 +116,23 @@ def normalize_data(norm_params_file: str, pollution_data: DataFrame, weather_dat
     
     return pollution_data, weather_data
 
+
 def denormalize_data(norm_params_file: str, pollution_data: DataFrame, weather_data: Dataset) -> Tuple[DataFrame, Dataset]:
     """
     Denormalize the data using the normalization parameters.
+    
+    Args:
+        norm_params_file (str): Path to the YAML file containing normalization parameters
+        pollution_data (DataFrame): Pollution data to denormalize (can be None)
+        weather_data (Dataset): Weather data to denormalize (can be None)
+        
+    Returns:
+        Tuple[DataFrame, Dataset]: Denormalized pollution and weather data
     """
-
     print(f"Denormalizing data using {norm_params_file}...")
     # Load the normalization parameters
-    with open(norm_params_file, 'rb') as f:
-        norm_params = pickle.load(f)
+    with open(norm_params_file, 'r') as f:
+        norm_params = yaml.safe_load(f)
 
     # Denormalize the pollution data if it is not none
     if pollution_data is not None:
@@ -134,9 +158,10 @@ def denormalize_data(norm_params_file: str, pollution_data: DataFrame, weather_d
             std = norm_params['weather'][weather_var]['std']
 
             # Denormalize the data
-        weather_data[weather_var] = (weather_data[weather_var] * std) + mean
+            weather_data[weather_var] = (weather_data[weather_var] * std) + mean
     
     return pollution_data, weather_data
+
 
 if __name__ == "__main__":
 
@@ -154,7 +179,7 @@ if __name__ == "__main__":
     weather_data: Dataset = preproc_weather(weather_folder, years)
 
     # Create the normalization data
-    norm_params_file = join(root_folder, 'TrainingData', f"norm_params_{start_year}_to_{end_year}.pkl")
+    norm_params_file = join(root_folder, 'TrainingData', f"norm_params_{start_year}_to_{end_year}.yml")
     create_normalization_data(norm_params_file, pollution_data, weather_data, overwrite=False)
 
     # Normalize the data
@@ -173,4 +198,4 @@ if __name__ == "__main__":
     for weather_var in weather_vars:
         visualize_pollutant_vs_weather_var(pollution_data, weather_data, 
                                            output_file=join(output_imgs_folder, f"denormalized_{pol_col}_{weather_var}.png"),
-                                            pollutant_col=pol_col, weather_var=weather_var)
+                                           pollutant_col=pol_col, weather_var=weather_var)

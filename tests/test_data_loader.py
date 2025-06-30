@@ -13,7 +13,7 @@ def test_dataset_initialization(test_data_dir, sample_pollution_data, sample_wea
     os.makedirs(training_folder, exist_ok=True)
     
     # Create a temporary normalization params file
-    norm_params_file = join(training_folder, 'norm_params_2010_to_2010.pkl')
+    norm_params_file = join(training_folder, 'norm_params_2010_to_2010.yml')
     
     # Initialize dataset
     dataset = MLforecastDataset(
@@ -42,7 +42,7 @@ def test_dataset_getitem(test_data_dir, sample_pollution_data, sample_weather_da
     os.makedirs(training_folder, exist_ok=True)
     
     # Create a temporary normalization params file
-    norm_params_file = join(training_folder, 'norm_params_2010_to_2010.pkl')
+    norm_params_file = join(training_folder, 'norm_params_2010_to_2010.yml')
     
     # Initialize dataset
     dataset = MLforecastDataset(
@@ -120,3 +120,33 @@ def test_dataloader(test_data_dir, sample_pollution_data, sample_weather_data):
         assert y[1].size(0) == 4  # batch size
         
         break  # Only test first batch 
+
+def test_data_loader_initialization(test_data_dir, sample_pollution_data, sample_weather_data):
+    """Test that the data loader can be initialized with sample data."""
+    # Create a temporary training folder
+    training_folder = join(test_data_dir, 'training')
+    os.makedirs(training_folder, exist_ok=True)
+    
+    # Create a temporary normalization params file
+    norm_params_file = join(training_folder, 'norm_params_2010_to_2010.yml')
+    
+    # Initialize data loader
+    data_loader = MLforecastDataLoader(
+        data_folder=test_data_dir,
+        norm_params_file=norm_params_file,
+        years=[2010],
+        pollutants_to_keep=['co', 'nodos', 'otres'],
+        prev_pollutant_hours=24,
+        prev_weather_hours=2,
+        next_weather_hours=1,
+        auto_regresive_steps=1,
+        bootstrap_enabled=False,
+        bootstrap_repetition=20,
+        bootstrap_threshold=2.5,
+        batch_size=2,
+        shuffle=True
+    )
+    
+    # Test that data loader was initialized correctly
+    assert data_loader is not None
+    assert len(data_loader) > 0 

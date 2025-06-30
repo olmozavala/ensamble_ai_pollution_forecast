@@ -44,7 +44,7 @@ def test_data_loader_initialization():
         # Create a minimal data loader for testing
         data_loader = MLforecastDataLoader(
             data_folder="/home/olmozavala/DATA/AirPollution",
-            norm_params_file="/home/olmozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
+            norm_params_file="/home/olmozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.yml",
             years=[2015],  # Use a single year for testing
             pollutants_to_keep=['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco'],
             prev_pollutant_hours=16,

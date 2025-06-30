@@ -13,8 +13,16 @@ import shutil
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import subprocess
+import sys
+import os
 
-from 4b_parallel_training import ParallelTrainer
+# Add the parent directory to the path to import the module
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import the ParallelTrainer class
+from importlib import import_module
+parallel_training_module = import_module('4b_parallel_training')
+ParallelTrainer = parallel_training_module.ParallelTrainer
 
 
 class TestParallelTrainer:
@@ -47,7 +55,7 @@ class TestParallelTrainer:
                 "type": "MLforecastDataLoader",
                 "args": {
                     "data_folder": "/test/data",
-                    "norm_params_file": "/test/norm.pkl",
+                    "norm_params_file": "/test/norm.yml",
                     "years": [2020, 2021],
                     "pollutants_to_keep": ["co", "nodos", "otres"],
                     "prev_pollutant_hours": 16,

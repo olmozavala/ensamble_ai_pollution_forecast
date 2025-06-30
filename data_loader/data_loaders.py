@@ -137,7 +137,7 @@ if __name__ == '__main__':
     start_year = min(years)
     end_year = max(years)
 
-    norm_params_file = join(data_folder, "TrainingData", f"norm_params_{start_year}_to_{end_year}.pkl")
+    norm_params_file = join(data_folder, "TrainingData", f"norm_params_{start_year}_to_{end_year}.yml")
     pollutants_to_keep = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco']
     # Data loader parameters
     batch_size = 2

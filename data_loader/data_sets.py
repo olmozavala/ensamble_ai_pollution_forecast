@@ -18,7 +18,9 @@ class MLforecastDataset(Dataset):
     
     Args:
         data_folder (str): Path to the main data folder containing subfolders for pollution, weather, and training data
+        norm_params_file (str): Path to the YAML file containing normalization parameters
         years (list): List of years to process
+        pollutants_to_keep (list): List of pollutants to keep in the dataset
         prev_pollutant_hours (int, optional): Number of previous hours of pollution data to use. Defaults to 24.
         prev_weather_hours (int, optional): Number of previous hours of weather data to use. Defaults to 2.
         next_weather_hours (int, optional): Number of future hours of weather data to predict. Defaults to 1.
@@ -290,7 +292,7 @@ if __name__ == "__main__":
     
     start_year = min(years)
     end_year = max(years)
-    norm_params_file = join(data_folder, "TrainingData", f"norm_params_{start_year}_to_{end_year}.pkl")
+    norm_params_file = join(data_folder, "TrainingData", f"norm_params_{start_year}_to_{end_year}.yml")
     pollutants_to_keep = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco', 'nox', 'no', 'sodos', 'pmco']
     
     # Test dataset creation
