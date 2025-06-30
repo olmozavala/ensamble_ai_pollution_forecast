@@ -71,13 +71,12 @@ class MLforecastDataset(Dataset):
         self.bootstrap_threshold = bootstrap_threshold
 
         self.data = {}
-        if not os.path.exists(pollution_data_file) or not os.path.exists(weather_data_file):
+        if not os.path.exists(pollution_data_file) or not os.path.exists(weather_data_file) or not os.path.exists(norm_params_file):
             print("Preprocessing data and saving to pickle files")
             pollution_data: DataFrame = preproc_pollution(self.pollution_folder, years, pollutants_to_keep)
             weather_data: XDataset = preproc_weather(self.weather_folder, years)
             
-            pollution_data, weather_data = intersect_dates( pollution_data, weather_data)
-
+            pollution_data, weather_data = intersect_dates(pollution_data, weather_data)
 
             # Normalize data
             if not os.path.exists(norm_params_file):
@@ -220,7 +219,7 @@ class MLforecastDataset(Dataset):
         self.total_dates: int = len(self.pollution_data)
         self.transform = transform
         print("Done initializing dataset!")
-    
+
     def get_column_and_index_names(self, column_type: str):
         """Get the column names and indices of the pollution dataframe"""
         if column_type == "pollutant_only":
@@ -286,7 +285,8 @@ if __name__ == "__main__":
     
     # Test parameters
     data_folder = "/home/olmozavala/DATA/AirPollution"
-    years = [2015]
+    # years = [2015]
+    years = [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]
     
     start_year = min(years)
     end_year = max(years)

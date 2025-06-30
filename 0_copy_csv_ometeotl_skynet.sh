@@ -4,6 +4,7 @@
 # Source: zion:/ZION/AirPollutionData/Data/MergedDataCSV/16/Imputed/ (remote)
 # Destination: /home/olmozavala/DATA/AirPollution/PollutionCSV/ (local quetzal)
 
+
 OMETEOTL_HOST="ometeotl.atmosfera.unam.mx"
 OMETEOTL_PORT="9022"
 OMETEOTL_USER="olmozavala"
@@ -14,6 +15,31 @@ echo "=== Simple CSV Copy Script (Running from skynet) ==="
 echo "From: $OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_PATH"
 echo "To: $LOCAL_PATH (local skynet)"
 echo ""
+
+# Finally copy normalization parameter files
+OMETEOTL_NORM_PATH="/home/olmozavala/DATA/AirPollution/TrainingData"
+LOCAL_NORM_PATH="/unity/f1/ozavala/DATA/AirPollution/TrainingData"
+
+echo ""
+echo "=== Copying Normalization Parameter Files ==="
+echo "From: $OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_NORM_PATH"
+echo "To: $LOCAL_NORM_PATH (local skynet)"
+echo ""
+
+# Copy norm_params files from ometeotl to local skynet
+echo "Copying norm_params files from ometeotl to skynet..."
+rsync -avz --progress --include="*.pkl" --exclude="*" \
+    -e "ssh -p $OMETEOTL_PORT" \
+    "$OMETEOTL_USER@$OMETEOTL_HOST:$OMETEOTL_NORM_PATH/" \
+    "$LOCAL_NORM_PATH"
+
+if [ $? -eq 0 ]; then
+    echo "Normalization parameter files copy completed successfully!"
+else
+    echo "Normalization parameter files copy failed!"
+    exit 1
+fi
+
 
 # Copy newer files from ometeotl to local skynet
 echo "Copying newer data_imputed_7* files from ometeotl to skynet..."
@@ -53,3 +79,4 @@ else
     echo "Weather files copy failed!"
     exit 1
 fi
+

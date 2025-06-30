@@ -93,6 +93,7 @@ class Trainer(BaseTrainer):
                     self.logger.error(f"Output shape: {output.shape}, Output: {output}")
                     raise ValueError("Training stopped due to NaN values in model output")
                 
+
                 loss = self.criterion(output, new_target)
                 total_loss += loss
 

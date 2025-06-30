@@ -68,7 +68,7 @@ class ParallelTrainer:
             'weather_transformer_blocks': [5],
             'pollution_transformer_blocks': [5],
             'pollutants_to_keep': [
-                ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"],  # all
+                ["co", "nodos", "otres", "pmdiez", "pmdoscinco"],  # all
                 ["otres"],  # only otres
             ],
             'bootstrap_enabled': [True, False],
