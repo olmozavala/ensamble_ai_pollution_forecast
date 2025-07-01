@@ -22,7 +22,7 @@
         "type": "MLforecastDataLoader",
         "args": {
             "data_folder": "/unity/f1/ozavala/DATA/AirPollution",
-            "norm_params_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
+            "norm_params_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.yml",
             "years": [
                 2010,
                 2011,
@@ -104,7 +104,7 @@
         "model_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/models/Parallel_all_prev8_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2/0630_173128",
         "visualize_batch": false,
         "prediction_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/predictions",
-        "denormalization_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
+        "denormalization_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.yml",
         "data_loader": {
             "years": [
                 2023

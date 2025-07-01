@@ -128,7 +128,7 @@ class MLforecastDataset(Dataset):
         else:
             print("Bootstrap disabled - skipping high ozone event re-sampling")
 
-        # ======================== Replacing all pollutants columns with the mean, min, and max of the stations ========================(except otres) 
+        # ======================== Replacing all pollutants columns with the mean, min, and max of the stations ========================(except otres)
         self.pollutant_columns = [col for col in self.pollution_data.columns if col.startswith('cont_')]
         # Calculate mean, min, and max values for each pollutant across all stations, except otres
         pollutant_stats = {}
@@ -284,15 +284,38 @@ class MLforecastDataset(Dataset):
 if __name__ == "__main__":
     # Test the dataset directly
     import matplotlib.pyplot as plt
-    
+
+
+    def read_config() -> dict:
+        """
+        Read and parse the config.json file.
+        
+        Returns:
+            dict: The parsed configuration dictionary
+        """
+        import json
+        
+        try:
+            with open('./config.json', 'r') as f:
+                config = json.load(f)
+            return config
+        except FileNotFoundError:
+            print("Error: config.json file not found")
+            return {}
+        except json.JSONDecodeError:
+            print("Error: Invalid JSON format in config.json")
+            return {}
+            
+    # Read the configuration file
+    config = read_config()
+
     # Test parameters
-    data_folder = "/home/olmozavala/DATA/AirPollution"
-    # years = [2015]
-    years = [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]
+    data_folder = config['data_loader']['args']['data_folder']
+    # Read the normalization parameters file
+    norm_params_file = config['data_loader']['args']['norm_params_file']
+
+    years = [2023]
     
-    start_year = min(years)
-    end_year = max(years)
-    norm_params_file = join(data_folder, "TrainingData", f"norm_params_{start_year}_to_{end_year}.yml")
     pollutants_to_keep = ['co', 'nodos', 'otres', 'pmdiez', 'pmdoscinco', 'nox', 'no', 'sodos', 'pmco']
     
     # Test dataset creation
@@ -326,4 +349,3 @@ if __name__ == "__main__":
     print(f"  datetime: {sample[2]}")
     
     print("Dataset test completed successfully!")
-

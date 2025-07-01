@@ -4,6 +4,7 @@ import pandas as pd
 import dash
 from dash import dcc, html, Input, Output
 import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 import argparse
 from parse_config import ConfigParser
 import numpy as np
@@ -23,6 +24,24 @@ config = ConfigParser.from_args(args)
 
 # Use prediction_path from config
 PREDICTION_PATH = config['test']['prediction_path']
+
+def create_model_id_mapping(models_data: Dict[str, pd.DataFrame]) -> Dict[str, str]:
+    """
+    Create a mapping from model names to shorter IDs.
+    
+    Args:
+        models_data: Dictionary mapping model names to their DataFrames
+        
+    Returns:
+        Dictionary mapping model names to their IDs
+    """
+    model_names = list(models_data.keys())
+    model_id_mapping = {}
+    
+    for i, model_name in enumerate(model_names, 1):
+        model_id_mapping[model_name] = f"M{i:02d}"
+    
+    return model_id_mapping
 
 def load_all_models_data(prediction_path: str) -> Dict[str, pd.DataFrame]:
     """
@@ -58,8 +77,6 @@ def load_all_models_data(prediction_path: str) -> Dict[str, pd.DataFrame]:
         for second_level_folder in second_level_folders:
             # Create combined model name
             model_name = f"{first_level_folder}_{second_level_folder}"
-            # Remove "Parallel" from model name for display
-            model_name = model_name.replace("Parallel", "")
             model_path = os.path.join(first_level_path, second_level_folder)
             
             print(f"Loading data from model: {model_name}")
@@ -155,12 +172,14 @@ def calculate_rmse_by_hour(data: pd.DataFrame, pollutant: str = 'otres') -> Dict
     return rmse_by_hour
 
 def create_rmse_comparison_plot(models_data: Dict[str, pd.DataFrame], 
+                               model_id_mapping: Dict[str, str],
                                pollutant: str = 'otres') -> go.Figure:
     """
     Create a plot comparing RMSE across all models by predicted hour.
     
     Args:
         models_data: Dictionary mapping model names to their DataFrames
+        model_id_mapping: Dictionary mapping model names to their IDs
         pollutant: Name of the pollutant to analyze
         
     Returns:
@@ -185,13 +204,18 @@ def create_rmse_comparison_plot(models_data: Dict[str, pd.DataFrame],
             valid_rmse = [rmse_values[j] for j in valid_indices]
             
             if valid_rmse:
+                model_id = model_id_mapping[model_name]
                 fig.add_trace(go.Scatter(
                     x=valid_hours,
                     y=valid_rmse,
                     mode='lines+markers',
-                    name=model_name,
+                    name=model_id,
                     line=dict(color=colors[i], width=2),
-                    marker=dict(size=6)
+                    marker=dict(size=6),
+                    hovertemplate=f'<b>{model_id}</b><br>' +
+                                 f'Model: {model_name}<br>' +
+                                 'Hour: %{x}<br>' +
+                                 'RMSE: %{y:.4f}<extra></extra>'
                 ))
     
     fig.update_layout(
@@ -205,12 +229,14 @@ def create_rmse_comparison_plot(models_data: Dict[str, pd.DataFrame],
     return fig
 
 def create_model_summary_table(models_data: Dict[str, pd.DataFrame], 
+                              model_id_mapping: Dict[str, str],
                               pollutant: str = 'otres') -> go.Figure:
     """
     Create a summary table showing overall metrics for each model.
     
     Args:
         models_data: Dictionary mapping model names to their DataFrames
+        model_id_mapping: Dictionary mapping model names to their IDs
         pollutant: Name of the pollutant to analyze
         
     Returns:
@@ -225,8 +251,10 @@ def create_model_summary_table(models_data: Dict[str, pd.DataFrame],
             valid_rmse = [val for val in rmse_by_hour.values() if not np.isnan(val)]
             
             if valid_rmse:
+                model_id = model_id_mapping[model_name]
                 summary_data.append({
-                    'Model': model_name,
+                    'Model ID': model_id,
+                    'Model Name': model_name,
                     'Mean RMSE': f"{np.mean(valid_rmse):.4f}",
                     'Std RMSE': f"{np.std(valid_rmse):.4f}",
                     'Min RMSE': f"{np.min(valid_rmse):.4f}",
@@ -237,16 +265,16 @@ def create_model_summary_table(models_data: Dict[str, pd.DataFrame],
     if not summary_data:
         # Create empty table
         fig = go.Figure(data=[go.Table(
-            header=dict(values=['Model', 'Mean RMSE', 'Std RMSE', 'Min RMSE', 'Max RMSE', 'Hours Available']),
-            cells=dict(values=[[], [], [], [], [], []]),
-            columnwidth=[0.4, 0.12, 0.12, 0.12, 0.12, 0.12]
+            header=dict(values=['Model ID', 'Model Name', 'Mean RMSE', 'Std RMSE', 'Min RMSE', 'Max RMSE', 'Hours Available']),
+            cells=dict(values=[[], [], [], [], [], [], []]),
+            columnwidth=[0.1, 0.3, 0.1, 0.1, 0.1, 0.1, 0.1]
         )])
     else:
         # Create table with data
         fig = go.Figure(data=[go.Table(
             header=dict(values=list(summary_data[0].keys())),
             cells=dict(values=[[row[key] for row in summary_data] for key in summary_data[0].keys()]),
-            columnwidth=[0.4, 0.12, 0.12, 0.12, 0.12, 0.12]
+            columnwidth=[0.1, 0.3, 0.1, 0.1, 0.1, 0.1, 0.1]
         )])
     
     fig.update_layout(
@@ -259,54 +287,45 @@ def create_model_summary_table(models_data: Dict[str, pd.DataFrame],
 
 
 def create_model_grouping_analysis(models_data: Dict[str, pd.DataFrame], 
+                                  model_id_mapping: Dict[str, str],
                                   pollutant: str = 'otres') -> go.Figure:
     """
-    Create a plot showing performance by model group (first level folder).
+    Create a plot showing performance by individual model.
     
     Args:
         models_data: Dictionary mapping model names to their DataFrames
+        model_id_mapping: Dictionary mapping model names to their IDs
         pollutant: Name of the pollutant to analyze
         
     Returns:
-        Plotly figure showing performance by model group
+        Plotly figure showing performance by individual model
     """
-    # Group models by their first level folder
-    model_groups = {}
-    for model_name in models_data.keys():
-        group_name = model_name.split('_')[0]  # First part before underscore
-        if group_name not in model_groups:
-            model_groups[group_name] = []
-        model_groups[group_name].append(model_name)
-    
     fig = go.Figure()
     
-    # Generate colors for different groups
-    colors = [f'hsl({int(i * 360 / len(model_groups))}, 70%, 50%)' 
-              for i in range(len(model_groups))]
+    # Generate colors for different models
+    colors = [f'hsl({int(i * 360 / len(models_data))}, 70%, 50%)' 
+              for i in range(len(models_data))]
     
-    for i, (group_name, group_models) in enumerate(model_groups.items()):
-        group_rmse_values = []
-        
-        for model_name in group_models:
-            data = models_data[model_name]
-            rmse_by_hour = calculate_rmse_by_hour(data, pollutant)
-            if rmse_by_hour:
-                valid_rmse = [val for val in rmse_by_hour.values() if not np.isnan(val)]
-                if valid_rmse:
-                    group_rmse_values.extend(valid_rmse)
-        
-        if group_rmse_values:
-            fig.add_trace(go.Box(
-                y=group_rmse_values,
-                name=group_name,
-                boxpoints='outliers',
-                marker_color=colors[i]
-            ))
+    for i, (model_name, data) in enumerate(models_data.items()):
+        rmse_by_hour = calculate_rmse_by_hour(data, pollutant)
+        if rmse_by_hour:
+            valid_rmse = [val for val in rmse_by_hour.values() if not np.isnan(val)]
+            if valid_rmse:
+                model_id = model_id_mapping[model_name]
+                fig.add_trace(go.Box(
+                    y=valid_rmse,
+                    name=model_id,
+                    boxpoints='outliers',
+                    marker_color=colors[i],
+                    hovertemplate=f'<b>{model_id}</b><br>' +
+                                 f'Model: {model_name}<br>' +
+                                 'RMSE: %{y:.4f}<extra></extra>'
+                ))
     
     fig.update_layout(
-        title=f'{pollutant.upper()} RMSE Distribution by Model Group',
+        title=f'{pollutant.upper()} RMSE Distribution by Individual Model',
         yaxis_title='RMSE',
-        xaxis_title='Model Groups',
+        xaxis_title='Models',
         showlegend=False
     )
     
@@ -388,12 +407,14 @@ def calculate_classification_metrics(tp: int, fp: int, tn: int, fn: int) -> Dict
     }
 
 def create_confusion_matrix_plot(models_data: Dict[str, pd.DataFrame], 
+                                model_id_mapping: Dict[str, str],
                                 threshold: int, pollutant: str = 'otres') -> go.Figure:
     """
     Create confusion matrix plots for all models at a specific threshold.
     
     Args:
         models_data: Dictionary mapping model names to their DataFrames
+        model_id_mapping: Dictionary mapping model names to their IDs
         threshold: Ozone threshold in ppbs
         pollutant: Name of the pollutant to analyze
         
@@ -407,10 +428,15 @@ def create_confusion_matrix_plot(models_data: Dict[str, pd.DataFrame],
     cols = min(3, n_models)  # Max 3 columns
     rows = (n_models + cols - 1) // cols  # Ceiling division
     
+    # Create subplot titles using model IDs
+    subplot_titles = [model_id_mapping[model_name] for model_name in model_names]
+    
     fig = make_subplots(
         rows=rows, cols=cols,
-        subplot_titles=model_names,
-        specs=[[{"type": "heatmap"} for _ in range(cols)] for _ in range(rows)]
+        subplot_titles=subplot_titles,
+        specs=[[{"type": "heatmap"} for _ in range(cols)] for _ in range(rows)],
+        vertical_spacing=0.25,
+        horizontal_spacing=0.10
     )
     
     for i, model_name in enumerate(model_names):
@@ -457,25 +483,59 @@ def create_confusion_matrix_plot(models_data: Dict[str, pd.DataFrame],
     
     return fig
 
+def create_model_id_mapping_table(model_id_mapping: Dict[str, str]) -> go.Figure:
+    """
+    Create a table showing the mapping between model IDs and full model names.
+    
+    Args:
+        model_id_mapping: Dictionary mapping model names to their IDs
+        
+    Returns:
+        Plotly figure with mapping table
+    """
+    # Prepare data for table
+    model_ids = []
+    model_names = []
+    
+    for model_name, model_id in model_id_mapping.items():
+        model_ids.append(model_id)
+        model_names.append(model_name)
+    
+    fig = go.Figure(data=[go.Table(
+        header=dict(values=['Model ID', 'Model Name']),
+        cells=dict(values=[model_ids, model_names]),
+        columnwidth=[0.2, 0.8]
+    )])
+    
+    fig.update_layout(
+        title='Model ID Mapping',
+        height=200 + len(model_ids) * 40
+    )
+    
+    return fig
+
 def create_classification_summary_table(models_data: Dict[str, pd.DataFrame], 
+                                       model_id_mapping: Dict[str, str],
                                        thresholds: List[int], pollutant: str = 'otres') -> go.Figure:
     """
     Create a heatmap showing classification metrics for all models and thresholds.
     
     Args:
         models_data: Dictionary mapping model names to their DataFrames
+        model_id_mapping: Dictionary mapping model names to their IDs
         thresholds: List of ozone thresholds to evaluate
         pollutant: Name of the pollutant to analyze
         
     Returns:
         Plotly figure with heatmap
     """
-    model_names = []
+    model_ids = []
     metric_names = []
     metric_values = []
     
     for model_name, data in models_data.items():
-        model_names.append(model_name)
+        model_id = model_id_mapping[model_name]
+        model_ids.append(model_id)
         
         for threshold in thresholds:
             tp, fp, tn, fn = calculate_confusion_matrix_for_threshold(data, threshold, pollutant)
@@ -493,11 +553,11 @@ def create_classification_summary_table(models_data: Dict[str, pd.DataFrame],
                 round(metrics['specificity'], 3)
             ])
     
-    if not model_names:
+    if not model_ids:
         return go.Figure()
     
     # Reshape data for heatmap (models as rows, metrics as columns)
-    n_models = len(model_names)
+    n_models = len(model_ids)
     n_metrics_per_model = len(thresholds) * 3  # 3 metrics per threshold
     
     # Create the heatmap data matrix
@@ -513,7 +573,7 @@ def create_classification_summary_table(models_data: Dict[str, pd.DataFrame],
     fig = go.Figure(data=go.Heatmap(
         z=heatmap_data,
         x=unique_metric_names,
-        y=model_names,
+        y=model_ids,
         colorscale='RdYlGn',  # Red to Yellow to Green
         zmin=0,
         zmax=1,
@@ -528,7 +588,7 @@ def create_classification_summary_table(models_data: Dict[str, pd.DataFrame],
         title=f'{pollutant.upper()} Classification Performance Heatmap',
         xaxis_title='Metrics',
         yaxis_title='Models',
-        height=300 + len(model_names) * 30,
+        height=300 + len(model_ids) * 30,
         width=1400
     )
     
@@ -544,12 +604,23 @@ if not models_data:
 
 print(f"Successfully loaded data for {len(models_data)} models")
 
+# Create model ID mapping
+model_id_mapping = create_model_id_mapping(models_data)
+print("Model ID mapping created:")
+for model_name, model_id in model_id_mapping.items():
+    print(f"  {model_id}: {model_name}")
+
 # %% --- DASH APP ---
 app = dash.Dash(__name__)
 
 app.layout = html.Div([
     html.H1('Air Pollution Multi-Model Comparison Dashboard'),
     html.H3(f'Comparing {len(models_data)} models for OTRES pollutant'),
+    
+    html.Div([
+        html.H4('Model ID Mapping'),
+        dcc.Graph(id='model-id-mapping-table')
+    ], style={'marginBottom': '30px'}),
     
     html.Div([
         html.H4('Model Performance Summary'),
@@ -562,7 +633,7 @@ app.layout = html.Div([
     ], style={'marginBottom': '30px'}),
     
     html.Div([
-        html.H4('RMSE Distribution by Model Group'),
+        html.H4('RMSE Distribution by Individual Model'),
         dcc.Graph(id='model-grouping-plot')
     ], style={'marginBottom': '30px'}),
     
@@ -593,7 +664,8 @@ app.layout = html.Div([
 ])
 
 @app.callback(
-    [Output('summary-table', 'figure'),
+    [Output('model-id-mapping-table', 'figure'),
+     Output('summary-table', 'figure'),
      Output('rmse-comparison-plot', 'figure'),
      Output('model-grouping-plot', 'figure'),
      Output('classification-summary-table', 'figure'),
@@ -606,36 +678,40 @@ app.layout = html.Div([
 def update_plots(dummy_input):
     """Update all plots with the loaded model data."""
     
+    # Create model ID mapping table
+    mapping_fig = create_model_id_mapping_table(model_id_mapping)
+    
     # Create summary table
-    summary_fig = create_model_summary_table(models_data, 'otres')
+    summary_fig = create_model_summary_table(models_data, model_id_mapping, 'otres')
     
     # Create RMSE comparison plot
-    rmse_fig = create_rmse_comparison_plot(models_data, 'otres')
+    rmse_fig = create_rmse_comparison_plot(models_data, model_id_mapping, 'otres')
     
     # Create model grouping analysis
-    grouping_fig = create_model_grouping_analysis(models_data, 'otres')
+    grouping_fig = create_model_grouping_analysis(models_data, model_id_mapping, 'otres')
     
     # Create classification summary table
     thresholds = [90, 120, 150]
-    classification_summary_fig = create_classification_summary_table(models_data, thresholds, 'otres')
+    classification_summary_fig = create_classification_summary_table(models_data, model_id_mapping, thresholds, 'otres')
     
     # Create confusion matrix plots for each threshold
-    confusion_90_fig = create_confusion_matrix_plot(models_data, 90, 'otres')
-    confusion_120_fig = create_confusion_matrix_plot(models_data, 120, 'otres')
-    confusion_150_fig = create_confusion_matrix_plot(models_data, 150, 'otres')
+    confusion_90_fig = create_confusion_matrix_plot(models_data, model_id_mapping, 90, 'otres')
+    confusion_120_fig = create_confusion_matrix_plot(models_data, model_id_mapping, 120, 'otres')
+    confusion_150_fig = create_confusion_matrix_plot(models_data, model_id_mapping, 150, 'otres')
     
     # Create model information
     model_info = []
     for model_name, data in models_data.items():
+        model_id = model_id_mapping[model_name]
         info = html.Div([
-            html.H5(f"Model: {model_name}"),
+            html.H5(f"Model {model_id}: {model_name}"),
             html.P(f"Total records: {len(data):,}"),
             html.P(f"Date range: {data['timestamp'].min()} to {data['timestamp'].max()}"),
             html.Hr()
         ])
         model_info.append(info)
     
-    return summary_fig, rmse_fig, grouping_fig, classification_summary_fig, confusion_90_fig, confusion_120_fig, confusion_150_fig, model_info
+    return mapping_fig, summary_fig, rmse_fig, grouping_fig, classification_summary_fig, confusion_90_fig, confusion_120_fig, confusion_150_fig, model_info
 
 if __name__ == '__main__':
     app.run(debug=True, port=8073) 
