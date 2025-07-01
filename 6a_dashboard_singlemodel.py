@@ -194,8 +194,8 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
         ]
         
         # Calculate mean and max across all stations
-        df_true_window_all['mean_all_stations'] = df_true_window_all[true_cols_all_stations].mean(axis=1)
-        df_true_window_all['max_all_stations'] = df_true_window_all[true_cols_all_stations].max(axis=1)
+        df_true_window_all.loc[:, 'mean_all_stations'] = df_true_window_all[true_cols_all_stations].mean(axis=1)
+        df_true_window_all.loc[:, 'max_all_stations'] = df_true_window_all[true_cols_all_stations].max(axis=1)
         
         # Plot mean across all stations
         fig1.add_trace(go.Scatter(
@@ -263,7 +263,7 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
             (df_true_source_all['timestamp'] >= start_time) & (df_true_source_all['timestamp'] <= end_time)
         ]
         
-        df_true_window_all['max_all_stations'] = df_true_window_all[true_cols_all_stations].max(axis=1)
+        df_true_window_all.loc[:, 'max_all_stations'] = df_true_window_all[true_cols_all_stations].max(axis=1)
         
         fig2.add_trace(go.Scatter(
             x=df_true_window_all['timestamp'],
@@ -292,7 +292,7 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
             
             if not df_window.empty:
                 # Calculate max across all stations for this forecast hour
-                df_window['pred_max_all_stations'] = df_window[pred_cols_all_stations].max(axis=1)
+                df_window.loc[:, 'pred_max_all_stations'] = df_window[pred_cols_all_stations].max(axis=1)
                 
                 fig2.add_trace(go.Scatter(
                     x=df_window['target_time'],
@@ -323,7 +323,7 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
             (df_true_source_all['timestamp'] >= start_time) & (df_true_source_all['timestamp'] <= end_time)
         ]
         
-        df_true_window_all['mean_all_stations'] = df_true_window_all[true_cols_all_stations].mean(axis=1)
+        df_true_window_all.loc[:, 'mean_all_stations'] = df_true_window_all[true_cols_all_stations].mean(axis=1)
         
         fig3.add_trace(go.Scatter(
             x=df_true_window_all['timestamp'],
@@ -352,7 +352,7 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
             
             if not df_window.empty:
                 # Calculate mean across all stations for this forecast hour
-                df_window['pred_mean_all_stations'] = df_window[pred_cols_all_stations].mean(axis=1)
+                df_window.loc[:, 'pred_mean_all_stations'] = df_window[pred_cols_all_stations].mean(axis=1)
                 
                 fig3.add_trace(go.Scatter(
                     x=df_window['target_time'],
@@ -383,7 +383,7 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
             (df_true_source_all['timestamp'] >= start_time) & (df_true_source_all['timestamp'] <= end_time)
         ]
         
-        df_true_window_all['min_all_stations'] = df_true_window_all[true_cols_all_stations].min(axis=1)
+        df_true_window_all.loc[:, 'min_all_stations'] = df_true_window_all[true_cols_all_stations].min(axis=1)
         
         fig4.add_trace(go.Scatter(
             x=df_true_window_all['timestamp'],
@@ -412,7 +412,7 @@ def create_station_based_plots(data: pd.DataFrame, pollutant: str, selected_stat
             
             if not df_window.empty:
                 # Calculate min across all stations for this forecast hour
-                df_window['pred_min_all_stations'] = df_window[pred_cols_all_stations].min(axis=1)
+                df_window.loc[:, 'pred_min_all_stations'] = df_window[pred_cols_all_stations].min(axis=1)
                 
                 fig4.add_trace(go.Scatter(
                     x=df_window['target_time'],

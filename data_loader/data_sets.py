@@ -126,7 +126,7 @@ class MLforecastDataset(Dataset):
             print(f"Found {len(self.bootstrap_indexes)} high ozone events to bootstrap")
             self.random_sampler_weights[self.bootstrap_indexes] = self.bootstrap_repetition
         else:
-            print("Bootstrap disabled - skipping high ozone event identification")
+            print("Bootstrap disabled - skipping high ozone event re-sampling")
 
         # ======================== Replacing all pollutants columns with the mean, min, and max of the stations ========================(except otres) 
         self.pollutant_columns = [col for col in self.pollution_data.columns if col.startswith('cont_')]

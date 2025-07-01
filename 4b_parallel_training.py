@@ -75,17 +75,18 @@ class ParallelTrainer:
         """
         # Define the parameter options
         param_options = {
-            'prev_pollutant_hours': [24],
+            'prev_pollutant_hours': [8, 24],
             'attention_heads': [4],
             'weather_transformer_blocks': [4],
             'pollution_transformer_blocks': [4],
             'pollutants_to_keep': [
                 ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"],  # all
+                ["otres"]
             ],
-            'bootstrap_enabled': [False],
+            'bootstrap_enabled': [True, False],
             'bootstrap_threshold': [2],
-            'auto_regresive_steps': [8],
-            'prev_weather_hours': [4],
+            'auto_regresive_steps': [8, 24],
+            'prev_weather_hours': [4, 8],
             'next_weather_hours': [2]
         }
         
@@ -130,6 +131,7 @@ class ParallelTrainer:
         config['arch']['args']['weather_time_dims'] = weather_time_dims
         
         # Compute input_features dynamically based on pollutants_to_keep
+        # 30 stations of ozone, 3 (min,avg, max) for other pollutants, 12 time features
         input_features = 30 + (len(params['pollutants_to_keep']) - 1) * 3 + 12
         config['arch']['args']['input_features'] = input_features
         
@@ -148,7 +150,7 @@ class ParallelTrainer:
         # Update model name to reflect parameters
         pollutants_str = "_".join(params['pollutants_to_keep'][:3])  # First 3 pollutants
         if len(params['pollutants_to_keep']) == 9:
-            pollutants_str = "_all"
+            pollutants_str = "all"
         
         config['name'] = f"Parallel_{pollutants_str}_prev{params['prev_pollutant_hours']}_heads{params['attention_heads']}_w{params['weather_transformer_blocks']}_p{params['pollution_transformer_blocks']}_ar{params['auto_regresive_steps']}_bootstrap{params['bootstrap_enabled']}_thresh{params['bootstrap_threshold']}_weather{params['prev_weather_hours']}_{params['next_weather_hours']}"
         
@@ -166,7 +168,7 @@ class ParallelTrainer:
         """
         pollutants_str = "_".join(params['pollutants_to_keep'][:3])
         if len(params['pollutants_to_keep']) > 3:
-            pollutants_str = "all_pollutants"
+            pollutants_str = "all"
         
         filename = f"parallel_{pollutants_str}_prev{params['prev_pollutant_hours']}_heads{params['attention_heads']}_w{params['weather_transformer_blocks']}_p{params['pollution_transformer_blocks']}_ar{params['auto_regresive_steps']}_bootstrap{params['bootstrap_enabled']}_thresh{params['bootstrap_threshold']}_weather{params['prev_weather_hours']}_{params['next_weather_hours']}.json"
         
