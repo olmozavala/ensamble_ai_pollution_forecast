@@ -76,6 +76,9 @@ class Trainer(BaseTrainer):
             self.optimizer.zero_grad()
             total_loss = 0.0
             cur_x_pollution_data = x_pollution_data.clone()
+
+            # Do the autoregressive steps but consider if the epoch is higher than the epochs_before_increase_auto_regresive_steps
+            # At least it will do 1 autoregressive step
             for predicted_hour in range(min(auto_regresive_steps, int(np.ceil(epoch/epochs_before_increase_auto_regresive_steps)))):
                 # Set the current weather window input
                 cur_weather_input = x_weather_data[:, predicted_hour:predicted_hour+weather_window_size, :]
@@ -92,7 +95,6 @@ class Trainer(BaseTrainer):
                     self.logger.error(f"NaN detected in model output at epoch {epoch}, batch {batch_idx}, predicted_hour {predicted_hour}")
                     self.logger.error(f"Output shape: {output.shape}, Output: {output}")
                     raise ValueError("Training stopped due to NaN values in model output")
-                
 
                 loss = self.criterion(output, new_target)
                 total_loss += loss
@@ -115,6 +117,7 @@ class Trainer(BaseTrainer):
             total_loss.backward()
             self.optimizer.step()
 
+            # Here we define the step for the tensorboard writer
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
             for met in self.metric_ftns:

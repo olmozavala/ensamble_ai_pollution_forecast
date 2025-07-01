@@ -78,5 +78,3 @@ trainer = Trainer(model, criterion, metrics, optimizer,
                     lr_scheduler=lr_scheduler)
 
 trainer.train()
-# "pollutants_to_keep": ["otres", "pmdoscinco", "nox", "co", "nodos", "no", "sodos", "pmdiez", "pmco"],
-# Fails with nox, no, sodos, pmco

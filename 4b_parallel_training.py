@@ -41,16 +41,23 @@ logger = logging.getLogger(__name__)
 class ParallelTrainer:
     """Handles parallel training with different configuration parameters."""
     
-    def __init__(self, base_config_path: str = "config.json"):
+    def __init__(self, base_config_path: str = "config.json", logs_dir: str = None):
         """
         Initialize the parallel trainer.
         
         Args:
             base_config_path: Path to the base configuration file
+            logs_dir: Directory to save training logs (default: logs/parallel_training)
         """
         self.base_config_path = base_config_path
         self.output_dir = Path("saved_confs/parallel_configs")
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create logs directory for individual training logs
+        if logs_dir is None:
+            logs_dir = "logs/parallel_training"
+        self.logs_dir = Path(logs_dir)
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
         
         # Load base configuration
         with open(base_config_path, 'r') as f:
@@ -68,18 +75,17 @@ class ParallelTrainer:
         """
         # Define the parameter options
         param_options = {
-            'prev_pollutant_hours': [8, 24, 36],
+            'prev_pollutant_hours': [24],
             'attention_heads': [4],
             'weather_transformer_blocks': [4],
             'pollution_transformer_blocks': [4],
             'pollutants_to_keep': [
                 ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"],  # all
-                ["otres"],  # only otres
             ],
-            'bootstrap_enabled': [True, False],
+            'bootstrap_enabled': [False],
             'bootstrap_threshold': [2],
-            'auto_regresive_steps': [8, 24],
-            'prev_weather_hours': [4, 8],
+            'auto_regresive_steps': [8],
+            'prev_weather_hours': [4],
             'next_weather_hours': [2]
         }
         
@@ -141,10 +147,10 @@ class ParallelTrainer:
         
         # Update model name to reflect parameters
         pollutants_str = "_".join(params['pollutants_to_keep'][:3])  # First 3 pollutants
-        if len(params['pollutants_to_keep']) > 3:
-            pollutants_str += "_all"
+        if len(params['pollutants_to_keep']) == 9:
+            pollutants_str = "_all"
         
-        config['name'] = f"Parallel_{pollutants_str}_prev{params['prev_pollutant_hours']}_heads{params['attention_heads']}_w{params['weather_transformer_blocks']}_p{params['pollution_transformer_blocks']}_ar{params['auto_regresive_steps']}_bootstrap{params['bootstrap_enabled']}_weather{params['prev_weather_hours']}_{params['next_weather_hours']}"
+        config['name'] = f"Parallel_{pollutants_str}_prev{params['prev_pollutant_hours']}_heads{params['attention_heads']}_w{params['weather_transformer_blocks']}_p{params['pollution_transformer_blocks']}_ar{params['auto_regresive_steps']}_bootstrap{params['bootstrap_enabled']}_thresh{params['bootstrap_threshold']}_weather{params['prev_weather_hours']}_{params['next_weather_hours']}"
         
         return config
     
@@ -179,12 +185,26 @@ class ParallelTrainer:
         """
         config_name = Path(config_path).stem
         
+        # Create log files for this training run
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        log_filename = f"{config_name}_{timestamp}_gpu{gpu_id}.log"
+        log_path = self.logs_dir / log_filename
+        
         # Set CUDA device
         env = os.environ.copy()
         env['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
         
         try:
             logger.info(f"Starting training for {config_name} on GPU {gpu_id}")
+            logger.info(f"Log file: {log_path}")
+            
+            # Write header to log file
+            with open(log_path, 'w') as log_file:
+                log_file.write(f"Training Log for {config_name}\n")
+                log_file.write(f"Started at: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                log_file.write(f"GPU ID: {gpu_id}\n")
+                log_file.write(f"Config file: {config_path}\n")
+                log_file.write("=" * 80 + "\n\n")
             
             # Run the training script
             cmd = ['.venv/bin/python', '4_train.py', '-c', config_path]
@@ -196,18 +216,44 @@ class ParallelTrainer:
                 timeout=3600  # 1 hour timeout
             )
             
+            # Write output to log file
+            with open(log_path, 'a') as log_file:
+                log_file.write("STDOUT:\n")
+                log_file.write("-" * 40 + "\n")
+                log_file.write(result.stdout)
+                log_file.write("\n\nSTDERR:\n")
+                log_file.write("-" * 40 + "\n")
+                log_file.write(result.stderr)
+                log_file.write(f"\n\nReturn code: {result.returncode}\n")
+                log_file.write(f"Completed at: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            
             if result.returncode == 0:
                 logger.info(f"Training completed successfully for {config_name}")
+                logger.info(f"Log saved to: {log_path}")
             else:
                 logger.error(f"Training failed for {config_name}: {result.stderr}")
+                logger.error(f"Log saved to: {log_path}")
                 
             return config_name, result.returncode
             
         except subprocess.TimeoutExpired:
+            # Write timeout error to log file
+            with open(log_path, 'a') as log_file:
+                log_file.write(f"\n\nERROR: Training timed out after 1 hour\n")
+                log_file.write(f"Timeout occurred at: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            
             logger.error(f"Training timed out for {config_name}")
+            logger.error(f"Log saved to: {log_path}")
             return config_name, -1
         except Exception as e:
+            # Write exception error to log file
+            with open(log_path, 'a') as log_file:
+                log_file.write(f"\n\nERROR: Exception occurred during training\n")
+                log_file.write(f"Exception: {str(e)}\n")
+                log_file.write(f"Exception occurred at: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            
             logger.error(f"Error running training for {config_name}: {str(e)}")
+            logger.error(f"Log saved to: {log_path}")
             return config_name, -1
     
     def generate_configs(self) -> List[str]:
@@ -301,6 +347,155 @@ class ParallelTrainer:
             for config_name, return_code in results.items():
                 if return_code != 0:
                     logger.info(f"  - {config_name} (return code: {return_code})")
+        
+        # Create summary log file
+        self._create_summary_log(results)
+    
+    def _create_summary_log(self, results: Dict[str, int]) -> None:
+        """
+        Create a summary log file with details about all training runs.
+        
+        Args:
+            results: Dictionary mapping config names to return codes
+        """
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        summary_filename = f"training_summary_{timestamp}.log"
+        summary_path = self.logs_dir / summary_filename
+        
+        successful = sum(1 for code in results.values() if code == 0)
+        failed = len(results) - successful
+        
+        with open(summary_path, 'w') as summary_file:
+            summary_file.write("PARALLEL TRAINING SUMMARY\n")
+            summary_file.write("=" * 50 + "\n")
+            summary_file.write(f"Generated at: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            summary_file.write(f"Total configurations: {len(results)}\n")
+            summary_file.write(f"Successful: {successful}\n")
+            summary_file.write(f"Failed: {failed}\n")
+            summary_file.write(f"Success rate: {successful/len(results)*100:.1f}%\n\n")
+            
+            summary_file.write("DETAILED RESULTS:\n")
+            summary_file.write("-" * 30 + "\n")
+            
+            # List all log files in the logs directory
+            log_files = list(self.logs_dir.glob(f"*_{timestamp[:8]}*.log"))
+            log_files.sort()
+            
+            for log_file in log_files:
+                # Extract config name from log filename
+                filename = log_file.name
+                if filename.startswith("training_summary_"):
+                    continue
+                    
+                # Parse the filename to get config name and status
+                parts = filename.replace(".log", "").split("_")
+                if len(parts) >= 2:
+                    config_name = "_".join(parts[:-2])  # Remove timestamp and gpu
+                    gpu_id = parts[-1].replace("gpu", "")
+                    
+                    # Find the result for this config
+                    return_code = results.get(config_name, -1)
+                    status = "SUCCESS" if return_code == 0 else "FAILED"
+                    
+                    summary_file.write(f"{config_name} (GPU {gpu_id}): {status} (code: {return_code})\n")
+                    summary_file.write(f"  Log file: {log_file.name}\n")
+            
+            summary_file.write(f"\nAll individual logs saved in: {self.logs_dir}\n")
+        
+        logger.info(f"Summary log created: {summary_path}")
+    
+    def list_logs(self) -> List[Path]:
+        """
+        List all available log files.
+        
+        Returns:
+            List of log file paths
+        """
+        log_files = list(self.logs_dir.glob("*.log"))
+        log_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)  # Sort by modification time
+        return log_files
+    
+    def analyze_logs(self, config_name: str = None) -> Dict[str, Any]:
+        """
+        Analyze log files to extract training statistics.
+        
+        Args:
+            config_name: Specific configuration to analyze (if None, analyze all)
+            
+        Returns:
+            Dictionary with analysis results
+        """
+        log_files = self.list_logs()
+        
+        if config_name:
+            log_files = [f for f in log_files if config_name in f.name]
+        
+        analysis = {
+            'total_logs': len(log_files),
+            'successful': 0,
+            'failed': 0,
+            'timeout': 0,
+            'exceptions': 0,
+            'configs': {}
+        }
+        
+        for log_file in log_files:
+            try:
+                with open(log_file, 'r') as f:
+                    content = f.read()
+                
+                # Extract config name from filename
+                filename = log_file.name
+                if filename.startswith("training_summary_"):
+                    continue
+                
+                parts = filename.replace(".log", "").split("_")
+                if len(parts) >= 2:
+                    config = "_".join(parts[:-2])
+                    
+                    if config not in analysis['configs']:
+                        analysis['configs'][config] = {
+                            'log_files': [],
+                            'status': 'unknown',
+                            'gpu_id': None,
+                            'start_time': None,
+                            'end_time': None
+                        }
+                    
+                    analysis['configs'][config]['log_files'].append(log_file.name)
+                    
+                    # Determine status from log content
+                    if "Training completed successfully" in content:
+                        analysis['configs'][config]['status'] = 'success'
+                        analysis['successful'] += 1
+                    elif "Training timed out" in content:
+                        analysis['configs'][config]['status'] = 'timeout'
+                        analysis['timeout'] += 1
+                    elif "Exception occurred" in content:
+                        analysis['configs'][config]['status'] = 'exception'
+                        analysis['exceptions'] += 1
+                    else:
+                        analysis['configs'][config]['status'] = 'failed'
+                        analysis['failed'] += 1
+                    
+                    # Extract GPU ID
+                    if "gpu" in parts[-1]:
+                        analysis['configs'][config]['gpu_id'] = parts[-1].replace("gpu", "")
+                    
+                    # Extract timestamps
+                    import re
+                    start_match = re.search(r"Started at: (.+)", content)
+                    if start_match:
+                        analysis['configs'][config]['start_time'] = start_match.group(1)
+                    
+                    end_match = re.search(r"Completed at: (.+)", content)
+                    if end_match:
+                        analysis['configs'][config]['end_time'] = end_match.group(1)
+                        
+            except Exception as e:
+                logger.warning(f"Could not analyze log file {log_file}: {e}")
+        
+        return analysis
 
 
 def main():
@@ -314,13 +509,45 @@ def main():
                        help='Maximum number of parallel processes')
     parser.add_argument('--generate-only', action='store_true',
                        help='Only generate configs, do not run training')
+    parser.add_argument('--logs-dir', type=str, default=None,
+                       help='Directory to save training logs (default: logs/parallel_training)')
+    parser.add_argument('--list-logs', action='store_true',
+                       help='List all available log files')
+    parser.add_argument('--analyze-logs', action='store_true',
+                       help='Analyze existing log files and show statistics')
+    parser.add_argument('--config-name', type=str, default=None,
+                       help='Specific configuration name for log analysis')
     
     args = parser.parse_args()
     
     # Initialize parallel trainer
-    trainer = ParallelTrainer(args.config)
+    trainer = ParallelTrainer(args.config, args.logs_dir)
     
-    if args.generate_only:
+    if args.list_logs:
+        # List all log files
+        log_files = trainer.list_logs()
+        logger.info(f"Found {len(log_files)} log files in {trainer.logs_dir}:")
+        for log_file in log_files:
+            logger.info(f"  - {log_file.name}")
+    elif args.analyze_logs:
+        # Analyze log files
+        analysis = trainer.analyze_logs(args.config_name)
+        logger.info("LOG ANALYSIS RESULTS:")
+        logger.info(f"Total log files: {analysis['total_logs']}")
+        logger.info(f"Successful runs: {analysis['successful']}")
+        logger.info(f"Failed runs: {analysis['failed']}")
+        logger.info(f"Timeout runs: {analysis['timeout']}")
+        logger.info(f"Exception runs: {analysis['exceptions']}")
+        
+        if analysis['configs']:
+            logger.info("\nConfiguration details:")
+            for config, details in analysis['configs'].items():
+                logger.info(f"  {config}: {details['status']} (GPU {details['gpu_id']})")
+                if details['start_time']:
+                    logger.info(f"    Started: {details['start_time']}")
+                if details['end_time']:
+                    logger.info(f"    Completed: {details['end_time']}")
+    elif args.generate_only:
         # Only generate configurations
         config_paths = trainer.generate_configs()
         logger.info(f"Generated {len(config_paths)} configuration files in {trainer.output_dir}")

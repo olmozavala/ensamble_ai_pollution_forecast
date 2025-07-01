@@ -103,10 +103,9 @@ class ParallelTester:
                 logger.warning(f"Could not read models path from config {config_name}: {e}")
                 continue
         
-        # If no config has the models path, use a default
-        default_path = Path("/home/olmozavala/DATA/AirPollution/OUTPUT/models")
-        logger.warning(f"Could not find models path in any config. Using default: {default_path}")
-        return default_path
+        # If no config has the models path, send an error
+        raise ValueError("Could not find models path in any config. Please check the config files.")
+        return None
     
     def _find_model_config_match(self, model_name: str) -> Optional[str]:
         """
