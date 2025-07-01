@@ -1,22 +1,21 @@
 {
-    "name": "ForParallel",
+    "name": "Parallel_all_prev8_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2",
     "n_gpu": 4,
-
     "arch": {
         "type": "MultiStreamTransformerModel",
         "args": {
             "weather_time_dims": 7,
-            "prev_pollutant_hours": 16,
+            "prev_pollutant_hours": 8,
             "weather_fields": 8,
             "input_features": 66,
             "weather_embedding_size": 128,
             "pollution_embedding_size": 64,
-            "attention_heads": 2,
+            "attention_heads": 4,
             "lat_size": 25,
             "lon_size": 25,
             "dropout": 0.1,
-            "weather_transformer_blocks": 5,
-            "pollution_transformer_blocks": 5
+            "weather_transformer_blocks": 4,
+            "pollution_transformer_blocks": 4
         }
     },
     "data_loader": {
@@ -24,15 +23,39 @@
         "args": {
             "data_folder": "/unity/f1/ozavala/DATA/AirPollution",
             "norm_params_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.yml",
-            "years": [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022],
-            "pollutants_to_keept ": ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"],
-            "prev_pollutant_hours": 16,
+            "years": [
+                2010,
+                2011,
+                2012,
+                2013,
+                2014,
+                2015,
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022
+            ],
+            "pollutants_to_keep": [
+                "co",
+                "nodos",
+                "otres",
+                "pmdiez",
+                "pmdoscinco",
+                "nox",
+                "no",
+                "sodos",
+                "pmco"
+            ],
+            "prev_pollutant_hours": 8,
             "prev_weather_hours": 4,
             "next_weather_hours": 2,
-            "auto_regresive_steps": 24,
+            "auto_regresive_steps": 8,
             "bootstrap_enabled": true,
             "bootstrap_repetition": 20,
-            "bootstrap_threshold": 2.0,
+            "bootstrap_threshold": 2,
             "batch_size": 1024,
             "shuffle": true,
             "validation_split": 0.1,
@@ -48,47 +71,51 @@
         "early_stop": 10,
         "tensorboard": true,
         "log_dir": "saved/runs",
-        "auto_regresive_steps": 24,
+        "auto_regresive_steps": 8,
         "epochs_before_increase_auto_regresive_steps": 2
     },
     "optimizer": {
         "type": "Adam",
-        "args":{
+        "args": {
             "lr": 0.0001,
-            "weight_decay": 1e-5,
+            "weight_decay": 1e-05,
             "amsgrad": true
         }
     },
     "loss": "asymmetric_weighted_mse_loss",
-    "metrics": ["rmse_metric"],
+    "metrics": [
+        "rmse_metric"
+    ],
     "lr_scheduler": {
         "type": "ReduceLROnPlateau",
         "args": {
             "mode": "min",
             "factor": 0.1,
             "patience": 4,
-            "threshold": 1e-4,
+            "threshold": 0.0001,
             "threshold_mode": "rel",
             "cooldown": 0,
-            "min_lr": 1e-8,
-            "eps": 1e-8
+            "min_lr": 1e-08,
+            "eps": 1e-08
         }
     },
     "test": {
         "all_models_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/models",
-        "model_path": "/MeanPollutantsNewCSVFilesImputedWithClimatologyBootstrap3/0625_072008",
+        "model_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/models/Parallel_all_prev8_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2/0630_173128",
         "visualize_batch": false,
         "prediction_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/predictions",
         "denormalization_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.yml",
         "data_loader": {
-            "years": [2023],
+            "years": [
+                2023
+            ],
             "batch_size": 128,
             "shuffle": false,
             "validation_split": 0.0,
             "num_workers": 2,
             "auto_regresive_steps": 24
         },
-        "visualize":{
+        "visualize": {
             "output_folder": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/imgs",
             "weather_var_idx": 0,
             "contaminant_name": "co",

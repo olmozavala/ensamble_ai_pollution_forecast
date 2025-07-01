@@ -199,9 +199,6 @@ def main(config):
             print(f"Batch {batch_idx} loss: {loss.item()/batch_size:.6f}")
             # print(f"Batch {batch_idx} metrics: {total_metrics/batch_size}")
 
-            if batch_idx > 3:
-                break
-
     # Save predictions and targets to CSV files for each predicted hour
     for hour in range(0, total_predicted_hours):
         # Convert lists to numpy arrays
