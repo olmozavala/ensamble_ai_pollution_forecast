@@ -23,7 +23,7 @@
         "type": "MLforecastDataLoader",
         "args": {
             "data_folder": "/unity/f1/ozavala/DATA/AirPollution",
-            "norm_params_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
+            "norm_params_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.yml",
             "years": [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022],
             "pollutants_to_keep": ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"],
             "prev_pollutant_hours": 16,
@@ -79,7 +79,7 @@
         "model_path": "/MeanPollutantsNewCSVFilesImputedWithClimatologyBootstrap3/0625_072008",
         "visualize_batch": false,
         "prediction_path": "/unity/f1/ozavala/DATA/AirPollution/OUTPUT/predictions",
-        "denormalization_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.pkl",
+        "denormalization_file": "/unity/f1/ozavala/DATA/AirPollution/TrainingData/norm_params_2010_to_2020.yml",
         "data_loader": {
             "years": [2023],
             "batch_size": 128,
