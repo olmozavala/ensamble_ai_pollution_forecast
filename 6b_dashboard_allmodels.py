@@ -284,8 +284,6 @@ def create_model_summary_table(models_data: Dict[str, pd.DataFrame],
     
     return fig
 
-
-
 def create_model_grouping_analysis(models_data: Dict[str, pd.DataFrame], 
                                   model_id_mapping: Dict[str, str],
                                   pollutant: str = 'otres') -> go.Figure:
@@ -594,6 +592,82 @@ def create_classification_summary_table(models_data: Dict[str, pd.DataFrame],
     
     return fig
 
+def save_model_performance_summary_csv(models_data: Dict[str, pd.DataFrame], 
+                                      model_id_mapping: Dict[str, str],
+                                      pollutant: str = 'otres',
+                                      output_file: str = 'SUMMARY.csv') -> None:
+    """
+    Save model performance summary data to a CSV file, sorted by Mean RMSE.
+    
+    Args:
+        models_data: Dictionary mapping model names to their DataFrames
+        model_id_mapping: Dictionary mapping model names to their IDs
+        pollutant: Name of the pollutant to analyze
+        output_file: Output CSV file path
+    """
+    summary_data = []
+    
+    for model_name, data in models_data.items():
+        rmse_by_hour = calculate_rmse_by_hour(data, pollutant)
+        
+        if rmse_by_hour:
+            valid_rmse = [val for val in rmse_by_hour.values() if not np.isnan(val)]
+            
+            if valid_rmse:
+                model_id = model_id_mapping[model_name]
+                summary_data.append({
+                    'Model_ID': model_id,
+                    'Model_Name': model_name,
+                    'Mean_RMSE': np.mean(valid_rmse),
+                    'Std_RMSE': np.std(valid_rmse),
+                    'Min_RMSE': np.min(valid_rmse),
+                    'Max_RMSE': np.max(valid_rmse),
+                    'Hours_Available': len(valid_rmse)
+                })
+    
+    if summary_data:
+        summary_df = pd.DataFrame(summary_data)
+        # Sort by Mean_RMSE (ascending - best performing models first)
+        summary_df = summary_df.sort_values('Mean_RMSE')
+        summary_df.to_csv(output_file, index=False)
+        print(f"Model performance summary saved to {output_file} (sorted by Mean RMSE)")
+    else:
+        print("No summary data to save")
+
+def save_rmse_by_hour_csv(models_data: Dict[str, pd.DataFrame], 
+                         model_id_mapping: Dict[str, str],
+                         pollutant: str = 'otres',
+                         output_file: str = 'SUMMARY_BY_HOUR.csv') -> None:
+    """
+    Save RMSE by hour data for all models to a CSV file.
+    
+    Args:
+        models_data: Dictionary mapping model names to their DataFrames
+        model_id_mapping: Dictionary mapping model names to their IDs
+        pollutant: Name of the pollutant to analyze
+        output_file: Output CSV file path
+    """
+    all_data = []
+    
+    for model_name, data in models_data.items():
+        rmse_by_hour = calculate_rmse_by_hour(data, pollutant)
+        model_id = model_id_mapping[model_name]
+        
+        for hour, rmse in rmse_by_hour.items():
+            all_data.append({
+                'Model_ID': model_id,
+                'Model_Name': model_name,
+                'Predicted_Hour': hour,
+                'RMSE': rmse if not np.isnan(rmse) else None
+            })
+    
+    if all_data:
+        rmse_df = pd.DataFrame(all_data)
+        rmse_df.to_csv(output_file, index=False)
+        print(f"RMSE by hour data saved to {output_file}")
+    else:
+        print("No RMSE by hour data to save")
+
 # %% Load data from all models
 print(f"Loading data from prediction path: {PREDICTION_PATH}")
 models_data = load_all_models_data(PREDICTION_PATH)
@@ -609,6 +683,12 @@ model_id_mapping = create_model_id_mapping(models_data)
 print("Model ID mapping created:")
 for model_name, model_id in model_id_mapping.items():
     print(f"  {model_id}: {model_name}")
+
+# Save summary CSV files
+print("\nSaving summary CSV files...")
+save_model_performance_summary_csv(models_data, model_id_mapping, 'otres', 'SUMMARY.csv')
+save_rmse_by_hour_csv(models_data, model_id_mapping, 'otres', 'SUMMARY_BY_HOUR.csv')
+print("CSV files saved successfully!\n")
 
 # %% --- DASH APP ---
 app = dash.Dash(__name__)

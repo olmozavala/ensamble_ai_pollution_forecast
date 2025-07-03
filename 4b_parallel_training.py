@@ -75,17 +75,17 @@ class ParallelTrainer:
         """
         # Define the parameter options
         param_options = {
-            'prev_pollutant_hours': [24],
+            'prev_pollutant_hours': [24, 36],
             'attention_heads': [8],
-            'weather_transformer_blocks': [4],
-            'pollution_transformer_blocks': [4],
+            'weather_transformer_blocks': [6],
+            'pollution_transformer_blocks': [6],
             'pollutants_to_keep': [
                 ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"]  # all
             ],
             'bootstrap_enabled': [True],
             'bootstrap_threshold': [1.5, 2, 3],
             'auto_regresive_steps': [8],
-            'prev_weather_hours': [4],
+            'prev_weather_hours': [4, 6],
             'next_weather_hours': [2]
         }
         

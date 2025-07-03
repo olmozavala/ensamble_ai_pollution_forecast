@@ -90,6 +90,40 @@ def find_orphaned_log_folders(models_dir: str, logs_dir: str) -> List[str]:
     
     return orphaned_logs
 
+def find_orphaned_prediction_folders(models_dir: str, predictions_dir: str) -> List[str]:
+    """Find prediction folders that don't have corresponding model folders.
+    
+    Args:
+        models_dir: Path to the models directory
+        predictions_dir: Path to the predictions directory
+        
+    Returns:
+        List of orphaned prediction folder paths
+    """
+    orphaned_predictions = []
+    
+    if not os.path.exists(predictions_dir):
+        return orphaned_predictions
+    
+    # Get all model folders (including subdirectories)
+    model_folders = set()
+    if os.path.exists(models_dir):
+        for root, dirs, files in os.walk(models_dir):
+            # Get relative path from models directory
+            rel_path = os.path.relpath(root, models_dir)
+            model_folders.add(rel_path)
+    
+    # Check all prediction folders
+    for root, dirs, files in os.walk(predictions_dir):
+        # Get relative path from predictions directory
+        rel_path = os.path.relpath(root, predictions_dir)
+        
+        # If this prediction folder doesn't have a corresponding model folder, it's orphaned
+        if rel_path not in model_folders:
+            orphaned_predictions.append(root)
+    
+    return orphaned_predictions
+
 def delete_orphaned_log_folders(orphaned_logs: List[str], dry_run: bool = False) -> None:
     """Delete orphaned log folders that don't have corresponding model folders.
     
@@ -112,6 +146,29 @@ def delete_orphaned_log_folders(orphaned_logs: List[str], dry_run: bool = False)
                 print(f"Deleted orphaned log folder: {log_folder}")
             except Exception as e:
                 print(f"Error deleting orphaned log folder {log_folder}: {e}")
+
+def delete_orphaned_prediction_folders(orphaned_predictions: List[str], dry_run: bool = False) -> None:
+    """Delete orphaned prediction folders that don't have corresponding model folders.
+    
+    Args:
+        orphaned_predictions: List of orphaned prediction folder paths
+        dry_run: If True, only show what would be deleted without actually deleting
+    """
+    if not orphaned_predictions:
+        print("No orphaned prediction folders found.")
+        return
+    
+    print(f"\n{'Deleting' if not dry_run else 'Would delete'} {len(orphaned_predictions)} orphaned prediction folders...")
+    
+    for prediction_folder in orphaned_predictions:
+        if dry_run:
+            print(f"[DRY RUN] Would delete orphaned prediction folder: {prediction_folder}")
+        else:
+            try:
+                shutil.rmtree(prediction_folder)
+                print(f"Deleted orphaned prediction folder: {prediction_folder}")
+            except Exception as e:
+                print(f"Error deleting orphaned prediction folder {prediction_folder}: {e}")
 
 def delete_folder_and_logs(folder_path: str, models_dir: str, logs_dir: str, dry_run: bool = False) -> None:
     """Delete a folder and its corresponding log folder.
@@ -165,9 +222,11 @@ def main(dry_run: bool = False) -> None:
     # Get the models directory path
     models_dir = os.path.join(save_dir, 'models')
     logs_dir = os.path.join(save_dir, 'logs')
+    predictions_dir = os.path.join(save_dir, 'predictions')
     
     print(f"Models directory: {models_dir}")
     print(f"Logs directory: {logs_dir}")
+    print(f"Predictions directory: {predictions_dir}")
     
     if dry_run:
         print(f"\n{'='*60}")
@@ -217,6 +276,11 @@ def main(dry_run: bool = False) -> None:
     print(f"\nChecking for orphaned log folders...")
     orphaned_logs = find_orphaned_log_folders(models_dir, logs_dir)
     delete_orphaned_log_folders(orphaned_logs, dry_run)
+    
+    # Find and delete orphaned prediction folders
+    print(f"\nChecking for orphaned prediction folders...")
+    orphaned_predictions = find_orphaned_prediction_folders(models_dir, predictions_dir)
+    delete_orphaned_prediction_folders(orphaned_predictions, dry_run)
     
     if dry_run:
         print(f"\n{'='*60}")

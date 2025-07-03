@@ -1,16 +1,16 @@
 {
-    "name": "Parallel_all_prev8_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2",
+    "name": "Parallel_all_prev24_heads8_w4_p4_ar8_bootstrapFalse_thresh2_weather4_2",
     "n_gpu": 4,
     "arch": {
         "type": "MultiStreamTransformerModel",
         "args": {
             "weather_time_dims": 7,
-            "prev_pollutant_hours": 8,
+            "prev_pollutant_hours": 24,
             "weather_fields": 8,
             "input_features": 66,
             "weather_embedding_size": 128,
             "pollution_embedding_size": 64,
-            "attention_heads": 4,
+            "attention_heads": 8,
             "lat_size": 25,
             "lon_size": 25,
             "dropout": 0.1,
@@ -49,11 +49,11 @@
                 "sodos",
                 "pmco"
             ],
-            "prev_pollutant_hours": 8,
+            "prev_pollutant_hours": 24,
             "prev_weather_hours": 4,
             "next_weather_hours": 2,
             "auto_regresive_steps": 8,
-            "bootstrap_enabled": true,
+            "bootstrap_enabled": false,
             "bootstrap_repetition": 20,
             "bootstrap_threshold": 2,
             "batch_size": 1024,
@@ -109,7 +109,7 @@
             "years": [
                 2023
             ],
-            "batch_size": 128,
+            "batch_size": 512,
             "shuffle": false,
             "validation_split": 0.0,
             "num_workers": 2,
