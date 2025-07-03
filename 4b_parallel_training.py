@@ -75,18 +75,17 @@ class ParallelTrainer:
         """
         # Define the parameter options
         param_options = {
-            'prev_pollutant_hours': [8, 24],
-            'attention_heads': [4],
+            'prev_pollutant_hours': [24],
+            'attention_heads': [8],
             'weather_transformer_blocks': [4],
             'pollution_transformer_blocks': [4],
             'pollutants_to_keep': [
-                ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"],  # all
-                ["otres"]
+                ["co", "nodos", "otres", "pmdiez", "pmdoscinco", "nox", "no", "sodos", "pmco"]  # all
             ],
-            'bootstrap_enabled': [True, False],
-            'bootstrap_threshold': [2],
-            'auto_regresive_steps': [8, 24],
-            'prev_weather_hours': [4, 8],
+            'bootstrap_enabled': [True],
+            'bootstrap_threshold': [1.5, 2, 3],
+            'auto_regresive_steps': [8],
+            'prev_weather_hours': [4],
             'next_weather_hours': [2]
         }
         
@@ -97,11 +96,6 @@ class ParallelTrainer:
         
         for combination in itertools.product(*param_values):
             param_dict = dict(zip(param_names, combination))
-            
-            # Skip invalid combinations (e.g., bootstrap_threshold when bootstrap is disabled)
-            if not param_dict['bootstrap_enabled'] and param_dict['bootstrap_threshold'] != 3:
-                continue
-                
             combinations.append(param_dict)
         
         logger.info(f"Generated {len(combinations)} parameter combinations")

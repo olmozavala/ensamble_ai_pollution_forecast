@@ -714,4 +714,4 @@ def update_plots(dummy_input):
     return mapping_fig, summary_fig, rmse_fig, grouping_fig, classification_summary_fig, confusion_90_fig, confusion_120_fig, confusion_150_fig, model_info
 
 if __name__ == '__main__':
-    app.run(debug=True, port=8073) 
+    app.run(debug=True, port=8085) 

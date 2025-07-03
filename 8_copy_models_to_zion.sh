@@ -11,6 +11,7 @@ if [ $# -eq 0 ]; then
     echo "Example: $0 MeanPollutantsNewCSVFilesImputedWithClimatologyBootstrap3"
     exit 1
 fi
+# Parallel_all_prev24_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2/0701_101128
 
 MODEL_NAME="$1"
 
