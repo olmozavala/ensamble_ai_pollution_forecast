@@ -1,0 +1,130 @@
+{
+    "name": "Parallel_all_prev24_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2",
+    "n_gpu": 4,
+    "arch": {
+        "type": "MultiStreamTransformerModel",
+        "args": {
+            "weather_time_dims": 7,
+            "prev_pollutant_hours": 24,
+            "weather_fields": 8,
+            "input_features": 66,
+            "weather_embedding_size": 128,
+            "pollution_embedding_size": 64,
+            "attention_heads": 4,
+            "lat_size": 25,
+            "lon_size": 25,
+            "dropout": 0.1,
+            "weather_transformer_blocks": 4,
+            "pollution_transformer_blocks": 4
+        }
+    },
+    "data_loader": {
+        "type": "MLforecastDataLoader",
+        "args": {
+            "data_folder": "/home/pedro/netcdfs",
+            "norm_params_file":  "/home/pedro/train_tmp/norm_params_2010_to_2020.yml",
+            "years": [
+                2010,
+                2011,
+                2012,
+                2013,
+                2014,
+                2015,
+                2016,
+                2017,
+                2018,
+                2019,
+                2020,
+                2021,
+                2022
+            ],
+            "pollutants_to_keep": [
+                "co",
+                "nodos",
+                "otres",
+                "pmdiez",
+                "pmdoscinco",
+                "nox",
+                "no",
+                "sodos",
+                "pmco"
+            ],
+            "prev_pollutant_hours": 24,
+            "prev_weather_hours": 4,
+            "next_weather_hours": 2,
+            "auto_regresive_steps": 8,
+            "bootstrap_enabled": true,
+            "bootstrap_repetition": 20,
+            "bootstrap_threshold": 2,
+            "batch_size": 1024,
+            "shuffle": true,
+            "validation_split": 0.1,
+            "num_workers": 4
+        }
+    },
+    "trainer": {
+        "epochs": 3000,
+        "save_dir": "/home/pedro/train_tmp/",
+        "save_period": 1,
+        "verbosity": 2,
+        "monitor": "min val_loss",
+        "early_stop": 10,
+        "tensorboard": true,
+        "log_dir": "saved/runs",
+        "auto_regresive_steps": 8,
+        "epochs_before_increase_auto_regresive_steps": 2
+    },
+    "optimizer": {
+        "type": "Adam",
+        "args": {
+            "lr": 0.0001,
+            "weight_decay": 1e-05,
+            "amsgrad": true
+        }
+    },
+    "loss": "asymmetric_weighted_mse_loss",
+    "metrics": [
+        "rmse_metric"
+    ],
+    "lr_scheduler": {
+        "type": "ReduceLROnPlateau",
+        "args": {
+            "mode": "min",
+            "factor": 0.1,
+            "patience": 4,
+            "threshold": 0.0001,
+            "threshold_mode": "rel",
+            "cooldown": 0,
+            "min_lr": 1e-08,
+            "eps": 1e-08
+        }
+    },
+    "test": {
+        "all_models_path": "/ZION/AirPollutionData/pedro_files/models/",
+        "model_path": "Parallel_all_prev24_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2",
+        "visualize_batch": false,
+        "prediction_path": "/home/pedro/train_tmp/predictions/",
+        "denormalization_file": "/home/pedro/train_tmp/norm_params_2010_to_2020.yml",
+        "data_loader": {
+            "years": [
+                2023,
+                2024
+            ],
+            "batch_size": 128,
+            "shuffle": false,
+            "validation_split": 0.0,
+            "num_workers": 2,
+            "auto_regresive_steps": 24
+        },
+        "visualize": {
+            "output_folder": "/home/pedro/train_tmp/OUTPUT/imgs",
+            "weather_var_idx": 0,
+            "contaminant_name": "co",
+            "weather_var_name": "T2"
+        }
+    },
+    "analyze": {
+        "single_model_path": "/ZION/AirPollutionData/pedro_files/models/Parallel_all_prev24_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2",
+        "output_path": "/home/pedro/train_tmp/OUTPUT/analysis"
+    }
+}
