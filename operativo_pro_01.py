@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-operativo_pro_01.py - Sistema Profesional de Inferencia en Tiempo Real para Pronóstico de Contaminación
+operativo_pro_01.py - Sistema de Inferencia en Tiempo Real para Pronóstico de Contaminación
 
-Script profesional y modularizado para realizar pronósticos de contaminación del aire
+Script modularizado para realizar pronósticos de contaminación del aire
 usando modelos de deep learning y datos meteorológicos WRF.
 
-VERSIÓN: 2.0 (Profesional)
+VERSIÓN: 2.0
 FECHA: 2024
 """
 
@@ -26,8 +26,8 @@ import model.model as module_arch
 from parse_config import ConfigParser
 from utils import read_json
 
-# Import del módulo de utilidades profesional
-from forecast_utils2 import ForecastSystem, DatabaseManager, WRFDataLoader, ModelInference, ResultsProcessor, WRFProcessor, ForecastBatchProcessor
+# Import del módulo de utilidades
+from operativo_files.forecast_utils2 import ForecastSystem, DatabaseManager, WRFDataLoader, ModelInference, ResultsProcessor, WRFProcessor, ForecastBatchProcessor
 
 
 class ForecastConfig:
@@ -42,7 +42,7 @@ class ForecastConfig:
     # VALORES POR DEFECTO (SIEMPRE COMO FALLBACK)
     # =============================================================================
     DEFAULT_TARGET_DATETIME = '2023-05-10 07:00:00'
-    DEFAULT_CONFIG_FILE = 'test_Parallel_all_prev24_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2_0701_101128.json'
+    DEFAULT_CONFIG_FILE = 'operativo_files/test_Parallel_all_prev24_heads4_w4_p4_ar8_bootstrapTrue_thresh2_weather4_2_0701_101128.json'
     DEFAULT_DEBUG_MODE = True
     DEFAULT_PLOTS_MODE = True
     DEFAULT_WRF_FOLDER = '/dev/shm/tem_ram_forecast/'
@@ -84,7 +84,7 @@ class ForecastConfig:
     
     def _create_argument_parser(self) -> argparse.ArgumentParser:
         """Crea el parser de argumentos de línea de comandos."""
-        parser = argparse.ArgumentParser(description='Sistema Profesional de Inferencia de Contaminación')
+        parser = argparse.ArgumentParser(description='Sistema de Inferencia de Contaminación')
         
         # Argumentos requeridos
         parser.add_argument('--target-datetime', type=str, required=True,

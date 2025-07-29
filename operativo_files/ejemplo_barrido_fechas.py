@@ -11,9 +11,12 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-# Imports del sistema profesional
+# Imports del sistema
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from operativo_pro_01 import ForecastConfig, ModelManager
-from forecast_utils2 import ForecastSystem, ForecastBatchProcessor
+from .forecast_utils2 import ForecastSystem, ForecastBatchProcessor
 
 
 def ejemplo_barrido_semanal():

@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-verificar_sistema.py - Script de verificación del sistema profesional
+verificar_sistema.py - Script de verificación del sistema
 
-Este script verifica que el sistema profesional funcione igual que el original.
+Este script verifica que el sistema funcione igual que el original.
 """
 
 import os
 import sys
 from datetime import datetime
+
+# Configurar path para importar desde directorio padre
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def verificar_archivos_existentes():
     """Verifica que todos los archivos necesarios existan."""
@@ -54,7 +57,7 @@ def verificar_imports():
         return False
     
     try:
-        from forecast_utils2 import (
+        from .forecast_utils2 import (
             ForecastSystem, DatabaseManager, WRFDataLoader, 
             ModelInference, ResultsProcessor, WRFProcessor, ForecastBatchProcessor
         )
@@ -97,7 +100,7 @@ def verificar_componentes():
     print("\n🔍 VERIFICANDO COMPONENTES PRINCIPALES...")
     
     try:
-        from forecast_utils2 import (
+        from .forecast_utils2 import (
             WRFProcessor, DatabaseManager, WRFDataLoader, 
             ModelInference, ResultsProcessor, ForecastSystem, ForecastBatchProcessor
         )
@@ -135,7 +138,7 @@ def verificar_flujo_completo():
     
     try:
         from operativo_pro_01 import ForecastConfig, ModelManager
-        from forecast_utils2 import ForecastSystem
+        from .forecast_utils2 import ForecastSystem
         
         # 1. Configuración
         config = ForecastConfig()
@@ -174,7 +177,7 @@ def verificar_barrido_fechas():
         from operativo_barrido_fechas import BatchForecastConfig, main as batch_main
         print("   ✅ BatchForecastConfig importada")
         
-        from forecast_utils2 import ForecastBatchProcessor
+        from .forecast_utils2 import ForecastBatchProcessor
         print("   ✅ ForecastBatchProcessor importada")
         
         # 2. Verificar configuración del barrido
@@ -184,7 +187,7 @@ def verificar_barrido_fechas():
         print("   ✅ Configuración de barrido creada")
         
         # 3. Verificar generación de fechas
-        from forecast_utils2 import ForecastSystem
+        from .forecast_utils2 import ForecastSystem
         test_config = {'name': 'test'}
         forecast_system = ForecastSystem(test_config)
         batch_processor = ForecastBatchProcessor(forecast_system, 'test_config.json')
@@ -215,7 +218,7 @@ def verificar_barrido_fechas():
 def main():
     """Función principal de verificación."""
     print("=" * 60)
-    print("🔍 VERIFICACIÓN DEL SISTEMA PROFESIONAL DE PRONÓSTICO")
+    print("🔍 VERIFICACIÓN DEL SISTEMA DE PRONÓSTICO")
     print("=" * 60)
     
     resultados = []
@@ -251,7 +254,7 @@ def main():
     
     if tests_passed == total_tests:
         print("\n🎉 ¡TODOS LOS TESTS EXITOSOS!")
-        print("✅ El sistema profesional está listo para usar")
+        print("✅ El sistema está listo para usar")
         print("\n💡 Para probar el sistema completo:")
         print("   python operativo_pro_01.py")
         print("   # o")

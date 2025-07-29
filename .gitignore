@@ -9,6 +9,10 @@ imgs/
 # .vscode
 .vscode/
 
+# Archivos operativos antiguos y directorios de salida
+operativo_01.py
+tem_var/
+
 # runs, saved, tests
 runs/
 saved/

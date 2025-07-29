@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-forecast_utils2.py - Utilidades profesionales para sistema de pronóstico de contaminación
+forecast_utils2.py - Utilidades para sistema de pronóstico de contaminación
 
 Módulo que contiene todas las funciones y clases necesarias para realizar inferencia
 en tiempo real de contaminación del aire.
@@ -1237,7 +1237,8 @@ class ForecastSystem:
             # 9. Desnormalizar resultados
             print("\n9️⃣ DESNORMALIZANDO RESULTADOS")
             # Aquí necesitarías cargar las columnas objetivo desde el archivo YAML
-            with open(f"column_names_{self.config['name']}.yml", 'r') as f:
+            column_file_path = os.path.join(os.path.dirname(__file__), f"column_names_{self.config['name']}.yml")
+            with open(column_file_path, 'r') as f:
                 column_names_dict = yaml.unsafe_load(f)
             output_columns = column_names_dict['pollution_columns']
             

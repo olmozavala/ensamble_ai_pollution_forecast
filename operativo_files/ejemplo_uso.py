@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ejemplo_uso.py - Ejemplo de uso del sistema profesional de pronóstico
+ejemplo_uso.py - Ejemplo de uso del sistema de pronóstico
 
 Este script muestra cómo usar el nuevo sistema modularizado para realizar
 pronósticos de contaminación.
 """
 # %%
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from operativo_pro_01 import main
 
 # Ejecutar con configuración por defecto
@@ -14,8 +17,9 @@ predicciones = main()
 
 # %%
 import os
+# sys.path ya configurado arriba
 from operativo_pro_01 import main, ForecastConfig, ModelManager
-from forecast_utils2 import ForecastSystem
+from .forecast_utils2 import ForecastSystem
 
 def ejemplo_basico():
     """Ejemplo básico usando la función main."""
@@ -96,7 +100,7 @@ def ejemplo_solo_configuracion():
     config2.print_final_configuration()
 
 if __name__ == "__main__":
-    print("🎯 EJEMPLOS DE USO DEL SISTEMA PROFESIONAL DE PRONÓSTICO")
+    print("🎯 EJEMPLOS DE USO DEL SISTEMA DE PRONÓSTICO")
     
     # Ejemplo 1: Uso básico
     predicciones_basicas = ejemplo_basico()
@@ -122,4 +126,4 @@ if __name__ == "__main__":
     print("   predicciones = main()")
     print("\n💡 Para configuración personalizada:")
     print("   from operativo_pro_01 import ForecastConfig, ModelManager")
-    print("   from forecast_utils2 import ForecastSystem") 
+    print("   from .forecast_utils2 import ForecastSystem") 
