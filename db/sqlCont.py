@@ -6,10 +6,10 @@ def getPostgresConn():
     """ Makes the connection with the DB"""
     print("Connecting to database....")
     secrets = netrc.netrc()
-    login, account, passw = secrets.hosts['OWGIS']
+    login, account, passw = secrets.hosts['AMATE-OPERATIVO']
 
-    host ='132.248.8.238'
-    # host ='localhost'
+    host = account  # IP del servidor desde netrc
+    # host ='localhost'  # Para desarrollo local
     #For Posgresql only
     try:
         conn = psycopg2.connect(database="contingencia", user=login, host=host, password=passw)

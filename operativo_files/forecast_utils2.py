@@ -509,9 +509,9 @@ class DatabaseManager:
         try:
             print("🔌 Conectando a base de datos...")
             secrets = netrc.netrc()
-            login, account, passw = secrets.hosts['OWGIS']
+            login, account, passw = secrets.hosts['AMATE-OPERATIVO']
             
-            host = '132.248.8.238'
+            host = account  # IP del servidor desde netrc
             self.connection = psycopg2.connect(
                 database="contingencia", 
                 user=login, 
