@@ -48,6 +48,7 @@ class ForecastConfig:
     DEFAULT_WRF_FOLDER = '/dev/shm/tem_ram_forecast/'
     DEFAULT_OUTPUT_FOLDER = './tem_var/'
     DEFAULT_VERBOSE = True
+    DEFAULT_SAVE_INPUT_VECTORS = False
     
     def __init__(self):
         """Inicializa configuración con valores por defecto."""
@@ -58,6 +59,7 @@ class ForecastConfig:
         self.wrf_folder = self.DEFAULT_WRF_FOLDER
         self.output_folder = self.DEFAULT_OUTPUT_FOLDER
         self.verbose = self.DEFAULT_VERBOSE
+        self.save_input_vectors = self.DEFAULT_SAVE_INPUT_VECTORS
         
     def parse_arguments(self) -> bool:
         """
@@ -107,6 +109,10 @@ class ForecastConfig:
                           help='Carpeta de salida')
         parser.add_argument('--verbose', '-v', action='store_true', default=argparse.SUPPRESS,
                           help='Modo verbose')
+        parser.add_argument('--save-input-vectors', action='store_true', default=argparse.SUPPRESS,
+                          help='Guardar vectores de entrada en CSV para análisis')
+        parser.add_argument('--no-save-input-vectors', action='store_false', dest='save_input_vectors', default=argparse.SUPPRESS,
+                          help='No guardar vectores de entrada')
         
         return parser
     
@@ -123,7 +129,8 @@ class ForecastConfig:
             'output_folder': 'output_folder',
             'debug': 'debug_mode',
             'plots': 'plots_mode',
-            'verbose': 'verbose'
+            'verbose': 'verbose',
+            'save_input_vectors': 'save_input_vectors'
         }
         
         parsed_args = vars(args)
@@ -151,6 +158,7 @@ class ForecastConfig:
         print(f"   📊 Plots: {self.plots_mode}")
         print(f"   💾 Output: {self.output_folder}")
         print(f"   🗣️ Verbose: {self.verbose}")
+        print(f"   📋 Save Input Vectors: {self.save_input_vectors}")
         print("-" * 50)
 
 
@@ -283,7 +291,9 @@ def main():
         predictions_denormalized = forecast_system.run_forecast(
             config.target_datetime,
             config.config_file_path,
-            config.output_folder
+            config.output_folder,
+            append_input_vectors=False,
+            save_input_vectors=config.save_input_vectors
         )
         
         # 5. Resultados finales

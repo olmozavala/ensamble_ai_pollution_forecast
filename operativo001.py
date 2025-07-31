@@ -245,7 +245,9 @@ def get_wrf_file_path(target_date, input_folder):
     year_folder = str(target_date.year)
     month_folder = get_month_folder_name(target_date.month)
     
-    file_pattern = f"wrfout_d01_{target_date.strftime('%Y-%m-%d')}_00.nc"
+    # NOTA: Usar d02 (alta resolución) en lugar de d01 para consistencia con 1_MakeNetcdf_From_WRF.py
+    # d02 es el dominio de mayor resolución espacial usado en el entrenamiento
+    file_pattern = f"wrfout_d02_{target_date.strftime('%Y-%m-%d')}_00.nc"
     file_path = os.path.join(input_folder, year_folder, month_folder, file_pattern)
     
     return file_path

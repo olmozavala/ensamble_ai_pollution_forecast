@@ -139,7 +139,9 @@ class ForecastBatchProcessor:
                          frequency: str = 'D',
                          output_csv: str = 'forecast_batch_results.csv',
                          save_progress: bool = True,
-                         resume_from_checkpoint: bool = True) -> pd.DataFrame:
+                         resume_from_checkpoint: bool = True,
+                         output_folder: str = "./tem_var",
+                         save_input_vectors: bool = False) -> pd.DataFrame:
         """
         Ejecuta barrido de fechas y genera CSV de pronósticos.
         
@@ -150,6 +152,8 @@ class ForecastBatchProcessor:
             output_csv: Archivo CSV de salida
             save_progress: Guardar progreso incremental
             resume_from_checkpoint: Reanudar desde último checkpoint
+            output_folder: Carpeta de salida para archivos (incluyendo input_vectors.csv)
+            save_input_vectors: Si True, guarda vectores de entrada en CSV
             
         Returns:
             DataFrame con todos los pronósticos
@@ -217,16 +221,32 @@ class ForecastBatchProcessor:
             'otros_errores': 0
         }
         
+        # Crear output_folder si no existe
+        os.makedirs(output_folder, exist_ok=True)
+        
+        # Limpiar input_vectors.csv al inicio del barrido si no estamos resumiendo
+        if save_input_vectors:
+            input_vectors_path = os.path.join(output_folder, 'input_vectors.csv')
+            if not resume_from_checkpoint or not os.path.exists(input_vectors_path):
+                if os.path.exists(input_vectors_path):
+                    os.remove(input_vectors_path)
+                    print(f"🗑️ CSV de input vectors limpiado: {input_vectors_path}")
+        
         for i, target_date in enumerate(tqdm(remaining_dates, desc="Procesando fechas")):
             try:
                 print(f"\n📅 PROCESANDO {i+1}/{len(remaining_dates)}: {target_date}")
                 print("-" * 50)
                 
+                # Determinar si usar append mode (True para todas las fechas excepto la primera)
+                is_append_mode = i > 0
+                
                 # Ejecutar pronóstico para esta fecha
                 predictions = self.forecast_system.run_forecast(
                     target_date, 
                     self.config_file_path,
-                    output_folder=f"./temp_batch_output_{target_date.replace(' ', '_').replace(':', '')}"
+                    output_folder=output_folder,
+                    append_input_vectors=is_append_mode,
+                    save_input_vectors=save_input_vectors
                 )
                 
                 # Estructurar datos para CSV
@@ -295,6 +315,20 @@ class ForecastBatchProcessor:
         print(f"   📊 Tasa de éxito: {(successful_forecasts/(successful_forecasts+failed_forecasts)*100):.1f}%")
         print(f"   📁 Archivo final: {output_csv}")
         print(f"   💾 Checkpoint: {checkpoint_file}")
+        
+        # Información sobre input vectors (solo si está habilitado)
+        if save_input_vectors:
+            input_vectors_file = os.path.join(output_folder, 'input_vectors.csv')
+            if os.path.exists(input_vectors_file):
+                try:
+                    input_vectors_df = pd.read_csv(input_vectors_file)
+                    print(f"   📋 Input vectors: {input_vectors_file}")
+                    print(f"   🔢 Total de vectores: {len(input_vectors_df)}")
+                    print(f"   📊 Columnas: {len(input_vectors_df.columns)}")
+                except Exception as e:
+                    print(f"   ⚠️ Error leyendo input vectors: {e}")
+            else:
+                print(f"   📋 Input vectors: Habilitado pero no se generó archivo")
         
         # Desglose de errores
         if failed_forecasts > 0:
@@ -948,11 +982,92 @@ class ModelInference:
         
         return x_pollution, x_weather
     
+    def save_input_vectors(self, 
+                          pollution_window: pd.DataFrame,
+                          weather_window: xr.Dataset,
+                          target_datetime: str,
+                          forecast_horizon: int,
+                          output_folder: str,
+                          append_mode: bool = False):
+        """
+        Guarda los vectores de entrada en formato CSV para análisis posterior.
+        
+        Args:
+            pollution_window: Ventana de datos de contaminación
+            weather_window: Ventana de datos meteorológicos
+            target_datetime: Fecha objetivo
+            forecast_horizon: Horizonte de pronóstico (hora +1, +2, etc.)
+            output_folder: Carpeta de salida
+            append_mode: Si True, append al CSV existente
+        """
+        # Crear directorio si no existe
+        os.makedirs(output_folder, exist_ok=True)
+        
+        # Archivo CSV para input vectors
+        csv_path = os.path.join(output_folder, 'input_vectors.csv')
+        
+        # Preparar fila de datos
+        row_data = {
+            'date': target_datetime,
+            'horizon_forecast': forecast_horizon
+        }
+        
+        # Agregar datos de contaminación (última fila de la ventana)
+        if len(pollution_window) > 0:
+            last_pollution = pollution_window.iloc[-1]
+            for col in pollution_window.columns:
+                row_data[f'pollution_{col}'] = last_pollution[col]
+        
+        # Agregar estadísticas de la ventana de contaminación
+        for col in pollution_window.columns:
+            row_data[f'pollution_{col}_mean'] = pollution_window[col].mean()
+            row_data[f'pollution_{col}_std'] = pollution_window[col].std()
+            row_data[f'pollution_{col}_min'] = pollution_window[col].min()
+            row_data[f'pollution_{col}_max'] = pollution_window[col].max()
+        
+        # Agregar datos meteorológicos completos (valores exactos del tensor de entrada)
+        weather_vars = list(weather_window.data_vars)
+        
+        # Guardar toda la matriz meteorológica: [time, vars, lat, lon]
+        for t_idx in range(weather_window.time.size):
+            for var_idx, var_name in enumerate(weather_vars):
+                var_data = weather_window[var_name].isel(time=t_idx)
+                
+                # Guardar toda la matriz espacial lat x lon
+                for lat_idx in range(var_data.lat.size):
+                    for lon_idx in range(var_data.lon.size):
+                        lat_val = float(var_data.lat.isel(lat=lat_idx))
+                        lon_val = float(var_data.lon.isel(lon=lon_idx))
+                        value = float(var_data.isel(lat=lat_idx, lon=lon_idx))
+                        
+                        # Nombre de columna: weather_VAR_t0_lat18.75_lon-99.75
+                        col_name = f'weather_{var_name}_t{t_idx}_lat{lat_val:.2f}_lon{lon_val:.2f}'
+                        row_data[col_name] = value
+        
+        # Convertir a DataFrame
+        df_row = pd.DataFrame([row_data])
+        
+        # Guardar o append
+        if append_mode and os.path.exists(csv_path):
+            df_row.to_csv(csv_path, mode='a', header=False, index=False)
+            print(f"   📄 Input vectors appended to: {csv_path}")
+        else:
+            df_row.to_csv(csv_path, mode='w', header=True, index=False)
+            print(f"   📄 Input vectors saved to: {csv_path}")
+        
+        return csv_path
+    
     def run_autoregressive_inference(self, x_pollution: torch.Tensor,
                                    x_weather: torch.Tensor,
                                    target_datetime: str,
                                    auto_regressive_steps: int,
-                                   weather_window_size: int) -> List[Dict]:
+                                   weather_window_size: int,
+                                   pollution_aligned: pd.DataFrame = None,
+                                   weather_aligned: xr.Dataset = None,
+                                   target_index: int = None,
+                                   output_folder: str = "./tem_var",
+                                   save_input_vectors: bool = True,
+                                   append_mode: bool = False) -> List[Dict]:
         """
         Ejecuta inferencia autorregresiva.
         
@@ -962,6 +1077,12 @@ class ModelInference:
             target_datetime: Fecha objetivo
             auto_regressive_steps: Número de pasos autorregresivos
             weather_window_size: Tamaño de ventana meteorológica
+            pollution_aligned: Datos originales de contaminación (para input vectors)
+            weather_aligned: Datos originales meteorológicos (para input vectors)
+            target_index: Índice objetivo (para input vectors)
+            output_folder: Carpeta de salida para input vectors
+            save_input_vectors: Si True, guarda input vectors en CSV
+            append_mode: Si True, append al CSV existente
             
         Returns:
             Lista de predicciones con metadatos
@@ -982,6 +1103,42 @@ class ModelInference:
             current_weather = x_weather[:, weather_start:weather_end, :, :, :]
             
             print(f"   🔄 Paso {step + 1}/{auto_regressive_steps} - {pred_datetime}")
+            
+            # Guardar input vectors si está habilitado
+            if save_input_vectors and pollution_aligned is not None and weather_aligned is not None:
+                try:
+                    # Extraer ventana de contaminación actual (en formato original)
+                    current_pollution_np = current_pollution.squeeze(0).cpu().numpy()
+                    pollution_df = pd.DataFrame(
+                        current_pollution_np,
+                        columns=pollution_aligned.columns,
+                        index=pd.date_range(
+                            start=target_dt - pd.Timedelta(hours=len(current_pollution_np)-1),
+                            periods=len(current_pollution_np),
+                            freq='H'
+                        )
+                    )
+                    
+                    # Extraer ventana meteorológica actual
+                    weather_start_idx = target_index - (len(current_pollution_np)-1) + weather_start
+                    weather_end_idx = weather_start_idx + weather_window_size
+                    
+                    if weather_start_idx >= 0 and weather_end_idx <= len(weather_aligned.time):
+                        current_weather_window = weather_aligned.isel(
+                            time=slice(weather_start_idx, weather_end_idx)
+                        )
+                        
+                        # Guardar input vectors para este horizonte
+                        self.save_input_vectors(
+                            pollution_window=pollution_df,
+                            weather_window=current_weather_window,
+                            target_datetime=target_datetime,
+                            forecast_horizon=step + 1,
+                            output_folder=output_folder,
+                            append_mode=append_mode or step > 0  # Append después del primer paso
+                        )
+                except Exception as e:
+                    print(f"   ⚠️ No se pudieron guardar input vectors para paso {step + 1}: {e}")
             
             # Predicción
             with torch.no_grad():
@@ -1160,7 +1317,9 @@ class ForecastSystem:
         self.results_processor = ResultsProcessor(norm_params_file)
         
     def run_forecast(self, target_datetime: str, config_file_path: str, 
-                     output_folder: str = "./output/") -> pd.DataFrame:
+                     output_folder: str = "./output/",
+                     append_input_vectors: bool = False,
+                     save_input_vectors: bool = True) -> pd.DataFrame:
         """
         Ejecuta pronóstico completo.
         
@@ -1168,6 +1327,8 @@ class ForecastSystem:
             target_datetime: Fecha objetivo en formato 'YYYY-MM-DD HH:MM:SS'
             config_file_path: Ruta al archivo de configuración JSON
             output_folder: Carpeta de salida
+            append_input_vectors: Si True, append al CSV de input vectors existente
+            save_input_vectors: Si True, guarda vectores de entrada en CSV
             
         Returns:
             DataFrame con predicciones desnormalizadas
@@ -1231,7 +1392,13 @@ class ForecastSystem:
                 x_pollution, x_weather, target_datetime,
                 self.config['test']['data_loader']['auto_regresive_steps'],
                 (self.config['data_loader']['args']['prev_weather_hours'] +
-                 self.config['data_loader']['args']['next_weather_hours'] + 1)
+                 self.config['data_loader']['args']['next_weather_hours'] + 1),
+                pollution_aligned=pollution_aligned,
+                weather_aligned=weather_aligned,
+                target_index=target_index,
+                output_folder=output_folder,
+                save_input_vectors=save_input_vectors,
+                append_mode=append_input_vectors
             )
             
             # 9. Desnormalizar resultados
