@@ -13,13 +13,13 @@ Sistema modularizado y profesional para realizar pronósticos de contaminación 
 - **Logging mejorado**: Mensajes informativos y de progreso
 - **Documentación completa**: Docstrings y comentarios profesionales
 - **Validaciones automáticas**: Verificación de datos y configuraciones
-- **Procesamiento WRF automático**: Ejecuta operativo001.py para generar archivos WRF
+- **Procesamiento WRF mejorado**: Ejecuta process_wrf_files_like_in_train.py para generar archivos WRF con consistencia total del entrenamiento
 - **Compatibilidad preservada**: Mantiene la funcionalidad del sistema original
 
 ### 🔧 Conservado del Original
 - **FORCE_DEFAULTS_FOR_DEBUG**: Sistema de debugging sin argparse
 - **Configuración por argumentos**: Soporte completo para línea de comandos
-- **Ejecución de operativo001.py**: Procesamiento WRF automático como el original
+- **Ejecución de process_wrf_files_like_in_train.py**: Procesamiento WRF mejorado con función del entrenamiento
 - **Funcionalidad idéntica**: Mismos resultados que el sistema original
 
 ## 📁 Estructura de Archivos
@@ -135,9 +135,9 @@ model = model_manager.build_and_load_model()
 ```
 
 ### 🌤️ WRFProcessor
-Procesador que ejecuta operativo001.py para generar archivos WRF.
+Procesador que ejecuta process_wrf_files_like_in_train.py para generar archivos WRF con consistencia del entrenamiento.
 ```python
-wrf_processor = WRFProcessor('operativo001.py')
+wrf_processor = WRFProcessor('process_wrf_files_like_in_train.py')
 success = wrf_processor.process_wrf_files(target_datetime, config_file)
 ```
 

@@ -22,7 +22,7 @@ def verificar_archivos_existentes():
         'forecast_utils2.py',
         'operativo_barrido_fechas.py',
         'ejemplo_barrido_fechas.py',
-        'operativo001.py',
+        'process_wrf_files_like_in_train.py',
         'operativo_01.py',
         'ejemplo_uso.py',
         'README_sistema_profesional.md'
@@ -147,16 +147,16 @@ def verificar_flujo_completo():
         
         # 2. Verificar archivos necesarios
         config_file_exists = os.path.exists(config.config_file_path)
-        operativo001_exists = os.path.exists('operativo001.py')
+        process_wrf_exists = os.path.exists('process_wrf_files_like_in_train.py')
         
         print(f"   ✅ Config file exists: {config_file_exists}")
-        print(f"   ✅ operativo001.py exists: {operativo001_exists}")
+        print(f"   ✅ process_wrf_files_like_in_train.py exists: {process_wrf_exists}")
         
         if not config_file_exists:
             print("   ⚠️  Archivo de configuración no encontrado, pero flujo OK")
         
-        if not operativo001_exists:
-            print("   ⚠️  operativo001.py no encontrado, pero flujo OK")
+        if not process_wrf_exists:
+            print("   ⚠️  process_wrf_files_like_in_train.py no encontrado, pero flujo OK")
         
         # 3. Verificar que main() puede ser importada
         from operativo_pro_01 import main

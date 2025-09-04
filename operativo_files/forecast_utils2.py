@@ -29,8 +29,16 @@ from tqdm import tqdm
 
 from proj_io.inout import generateDateColumns
 from proj_preproc.normalization import normalize_data, denormalize_data
+from .imputation_manager import ImputationManager
 
-
+# ===== INICIO CÓDIGO DE LOGGING TEMPORAL - BORRAR DESPUÉS =====
+def log_to_file(message, filename="last_log.txt"):
+    import datetime
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_entry = f"[{timestamp}] {message}\n"
+    with open(filename, 'a', encoding='utf-8') as f:
+        f.write(log_entry)
+        
 class ForecastBatchProcessor:
     """Procesador de lotes para barrido de fechas y generación de CSV de pronósticos."""
     
@@ -346,7 +354,7 @@ class ForecastBatchProcessor:
                 print("   • Verifique la conectividad a la base de datos")
             if error_categories['errores_wrf'] > 0:
                 print("   • Problemas con archivos meteorológicos WRF")
-                print("   • Verifique que operativo001.py funciona correctamente")
+                print("   • Verifique que process_wrf_files_like_in_train.py funciona correctamente")
             if error_categories['otros_errores'] > 0:
                 print("   • Revise los logs para errores específicos")
         
@@ -446,27 +454,33 @@ class ForecastBatchProcessor:
 
 
 class WRFProcessor:
-    """Procesador de archivos WRF que ejecuta operativo001.py para generar archivos necesarios."""
+    """Procesador de archivos WRF que ejecuta process_wrf_files_like_in_train.py para generar archivos necesarios."""
     
-    def __init__(self, operativo_script_path: str = 'operativo001.py'):
+    def __init__(self, operativo_script_path: str = 'process_wrf_files_like_in_train.py'):
         self.operativo_script_path = operativo_script_path
         
     def process_wrf_files(self, target_datetime: str, config_file_path: str, 
-                         verbose: bool = True) -> bool:
+                         output_folder: str = None, verbose: bool = True) -> bool:
         """
-        Ejecuta operativo001.py para generar archivos WRF necesarios.
+        Ejecuta process_wrf_files_like_in_train.py para generar archivos WRF necesarios.
+        
+        Este script usa la función original del entrenamiento para garantizar 
+        consistencia total con el dataset usado para entrenar el modelo.
         
         Args:
             target_datetime: Fecha objetivo en formato 'YYYY-MM-DD HH:MM:SS'
             config_file_path: Ruta al archivo de configuración JSON
+            output_folder: Carpeta de salida para archivos WRF (si None, usa default del script)
             verbose: Mostrar mensajes detallados
             
         Returns:
             True si el procesamiento fue exitoso, False en caso contrario
         """
         if verbose:
-            print("🚀 EJECUTANDO OPERATIVO001.PY PARA GENERAR ARCHIVOS WRF")
+            print("🚀 EJECUTANDO PROCESAMIENTO WRF CON FUNCIÓN DEL ENTRENAMIENTO")
             print("=" * 60)
+            print("   ✅ Usando process_wrf_files_like_in_train.py")
+            print("   ✅ Garantiza consistencia 100% con el entrenamiento")
         
         # Construir comando
         comando = [
@@ -475,6 +489,12 @@ class WRFProcessor:
             '--target-datetime', target_datetime,
             '--config-file', config_file_path
         ]
+        
+        # Agregar output_folder si se proporciona
+        if output_folder is not None:
+            comando.extend(['--output-folder', output_folder])
+            if verbose:
+                print(f"📁 Carpeta de salida WRF: {output_folder}")
         
         if verbose:
             print(f"📅 Fecha objetivo: {target_datetime}")
@@ -517,19 +537,128 @@ class WRFProcessor:
                 if verbose:
                     print("❌ ERROR EN PROCESAMIENTO WRF")
                     print(f"   Código de salida: {proceso.returncode}")
-                return False
+                
+                # INTENTAR FALLBACK CON temporal_slice_extractor_mockup.py
+                if verbose:
+                    print("\n🔄 INTENTANDO FALLBACK CON temporal_slice_extractor_mockup.py")
+                    print("=" * 60)
+                
+                fallback_success = self._run_fallback_wrf_processor(target_datetime, output_folder, verbose)
+                
+                if fallback_success:
+                    if verbose:
+                        print("✅ FALLBACK EXITOSO - Continuando con pronóstico")
+                    return True
+                else:
+                    if verbose:
+                        print("❌ FALLBACK TAMBIÉN FALLÓ - No se pueden generar archivos WRF")
+                    return False
                 
         except Exception as e:
             if verbose:
                 print(f"❌ ERROR EJECUTANDO {self.operativo_script_path}: {str(e)}")
+                print("   💡 Verifica que:")
+                print("   - El archivo process_wrf_files_like_in_   train.py exista")
+                print("   - Los archivos de configuración sean correctos")
+                print("   - Las librerías necesarias estén instaladas")
                 import traceback
                 traceback.print_exc()
-            return False
+            
+            # INTENTAR FALLBACK EN CASO DE EXCEPCIÓN
+            if verbose:
+                print("\n🔄 INTENTANDO FALLBACK CON temporal_slice_extractor_mockup.py")
+                print("=" * 60)
+            
+            fallback_success = self._run_fallback_wrf_processor(target_datetime, output_folder, verbose)
+            
+            if fallback_success:
+                if verbose:
+                    print("✅ FALLBACK EXITOSO - Continuando con pronóstico")
+                return True
+            else:
+                if verbose:
+                    print("❌ FALLBACK TAMBIÉN FALLÓ - No se pueden generar archivos WRF")
+                return False
         
         finally:
             if verbose:
                 print(f"\n🔚 EJECUCIÓN DE {self.operativo_script_path} COMPLETADA")
                 print("=" * 60)
+    
+    def _run_fallback_wrf_processor(self, target_datetime: str, output_folder: str = None, verbose: bool = True) -> bool:
+        """
+        Ejecuta el script de fallback temporal_slice_extractor_mockup.py cuando el procesamiento principal falla.
+        
+        Args:
+            target_datetime: Fecha objetivo en formato 'YYYY-MM-DD HH:MM:SS'
+            output_folder: Carpeta de salida para archivos WRF
+            verbose: Mostrar mensajes detallados
+            
+        Returns:
+            True si el fallback fue exitoso, False en caso contrario
+        """
+        #import sys
+        #print("se ejecuta _run_fallback_wrf_processor --revisar--.")
+        #sys.exit(0)  # termina el programa con código de salida 0
+        # fallback_script = 'temporal_slice2.py' #'temporal_slice_extractor_mockup.py'
+        # fallback_script = 'temporal_slice_extractor_mockup.py'        
+        fallback_script = 'temporal_slice3.py'
+        if verbose:
+            print(f"🔄 EJECUTANDO FALLBACK: {fallback_script}")
+            print(f"📅 Fecha objetivo: {target_datetime}")
+        
+        # Verificar que el script de fallback existe
+        if not os.path.exists(fallback_script):
+            if verbose:
+                print(f"❌ ERROR: No se encuentra {fallback_script}")
+                available_scripts = [f for f in os.listdir('.') if f.endswith('.py')]
+                print(f"   Scripts disponibles: {available_scripts}")
+            return False
+        
+        # Extraer fecha base (día anterior) para el fallback
+        from datetime import datetime, timedelta
+        target_dt = datetime.strptime(target_datetime, '%Y-%m-%d %H:%M:%S')
+        base_date = (target_dt - timedelta(days=1)).strftime('%Y-%m-%d')
+        
+        # Construir comando de fallback
+        comando_fallback = [
+            sys.executable,
+            fallback_script,
+            '--target-datetime', target_datetime,
+            '--num-days', '3',  # Generar 3 días de datos
+            '--output-folder', output_folder or './tem_var'
+        ]
+        
+        if verbose:
+            print(f"🔧 Comando fallback: {' '.join(comando_fallback)}")
+            print(f"📅 Target datetime para fallback: {target_datetime}")
+        
+        try:
+            # Ejecutar el script de fallback
+            proceso_fallback = subprocess.run(
+                comando_fallback,
+                capture_output=True,  # Mostrar salida en tiempo real
+                text=True,
+                cwd=os.getcwd()
+            )
+            
+            if proceso_fallback.returncode == 0:
+                if verbose:
+                    print("✅ FALLBACK EXITOSO")
+                    print(f"   Código de salida: {proceso_fallback.returncode}")
+                return True
+            else:
+                if verbose:
+                    print("❌ FALLBACK FALLÓ")
+                    print(f"   Código de salida: {proceso_fallback.returncode}")
+                return False
+                
+        except Exception as e:
+            if verbose:
+                print(f"❌ ERROR EJECUTANDO FALLBACK: {str(e)}")
+                import traceback
+                traceback.print_exc()
+            return False
 
 
 class DatabaseManager:
@@ -712,7 +841,7 @@ class PollutionDataManager:
         
         # Agregar variables de tiempo
         print("🕐 Generando variables cíclicas de tiempo...")
-        time_cols, time_values = generateDateColumns(date_range, flip_order=True)
+        time_cols, time_values = generateDateColumns(date_range, flip_order=False)
         time_df = pd.DataFrame(dict(zip(time_cols, time_values)), index=date_range)
         combined_df = pd.concat([final_df, time_df], axis=1)
         
@@ -812,60 +941,170 @@ class PollutionDataManager:
         return self.db.execute_query(query)
 
 
-class DataAligner:
-    """Alineador de datos de contaminación y meteorología."""
+# class DataAligner:
+#     """Alineador de datos de contaminación y meteorología."""
     
-    @staticmethod
-    def align_weather_pollution_utc6(pollution_data: pd.DataFrame, 
-                                   weather_data: xr.Dataset,
-                                   target_datetime: str,
-                                   utc_offset: int = 0) -> Tuple[pd.DataFrame, xr.Dataset, int]:
-        """
-        Alinea datos de contaminación y meteorología en UTC-6.
+#     @staticmethod
+#     def align_weather_pollution_utc6(pollution_data: pd.DataFrame, 
+#                                    weather_data: xr.Dataset,
+#                                    target_datetime: str,
+#                                    utc_offset: int = 0,
+#                                    next_weather_hours: int = 2,
+#                                    auto_regressive_steps: int = 24) -> Tuple[pd.DataFrame, xr.Dataset, int]:
+#         """
+#         Alinea datos de contaminación y meteorología en UTC-6.
         
-        Args:
-            pollution_data: Datos de contaminación
-            weather_data: Datos meteorológicos
-            target_datetime: Fecha objetivo
-            utc_offset: Offset UTC (default 0, ya aplicado)
+#         Args:
+#             pollution_data: Datos de contaminación
+#             weather_data: Datos meteorológicos
+#             target_datetime: Fecha objetivo
+#             utc_offset: Offset UTC (default 0, ya aplicado)
             
-        Returns:
-            Tupla (pollution_aligned, weather_aligned, target_index)
+#         Returns:
+#             Tupla (pollution_aligned, weather_aligned, target_index)
+#         """
+#         target_dt = pd.to_datetime(target_datetime)
+#         print(f"🎯 Target datetime (UTC-6): {target_dt}")
+        
+#         # 1. Convertir weather a UTC-6
+#         print("🌤️ Convirtiendo weather de UTC a UTC-6...")
+#         weather_aligned = weather_data.copy()
+#         weather_aligned['time'] = (pd.to_datetime(weather_data.time.values) + 
+#                                  pd.Timedelta(hours=utc_offset))
+        
+#         # 2. Filtrar y alinear contaminación
+#         print("🏭 Alineando datos de contaminación...")
+#         pollution_filtered = pollution_data[pollution_data.index <= target_dt]
+        
+#         # Asegurar que el rango incluya el target datetime
+#         weather_start = pd.Timestamp(weather_aligned.time.min().item())
+#         weather_end = pd.Timestamp(weather_aligned.time.max().item())
+        
+#         # Extender el rango para incluir target_dt + datos futuros necesarios
+#         future_hours_needed = next_weather_hours + auto_regressive_steps + 5  # +5 buffer
+#         target_plus_future = target_dt + pd.Timedelta(hours=future_hours_needed)
+        
+#         range_start = min(weather_start, target_dt)
+#         range_end = max(weather_end, target_plus_future)
+        
+#         print(f"   📊 Ajuste de rango para datos futuros:")
+#         print(f"      Future hours needed: {future_hours_needed}")
+#         print(f"      Target + future: {target_plus_future}")
+#         print(f"      Range final: {range_start} → {range_end}")
+        
+#         complete_time_index = pd.date_range(
+#             start=range_start,
+#             end=range_end,
+#             freq='H'
+#         )
+        
+#         pollution_aligned = pd.DataFrame(
+#             index=complete_time_index, 
+#             columns=pollution_filtered.columns
+#         )
+        
+#         # DEBUG: Mostrar rangos temporales para diagnosticar el problema
+#         print(f"   🔍 DEBUG - Rangos temporales:")
+#         print(f"      Weather original: {weather_start} → {weather_end}")
+#         print(f"      Pollution range: {pollution_filtered.index.min()} → {pollution_filtered.index.max()}")
+#         print(f"      Target datetime: {target_dt}")
+#         print(f"      Range extendido: {complete_time_index.min()} → {complete_time_index.max()}")
+#         print(f"      Overlap: {len(pollution_filtered.index.intersection(complete_time_index))} timestamps")
+#         print(f"      Target en rango: {target_dt in complete_time_index}")
+        
+#         # Usar reindex para alinear de forma segura
+#         pollution_reindexed = pollution_filtered.reindex(complete_time_index)
+#         pollution_aligned = pollution_reindexed.copy()
+#         pollution_aligned.fillna(-1, inplace=True)
+        
+#         # 3. Encontrar índice objetivo
+#         target_index = pollution_aligned.index.get_loc(target_dt)
+        
+#         print(f"✅ Alineación completada")
+#         print(f"   📊 Pollution shape: {pollution_aligned.shape}")
+#         print(f"   🌤️ Weather dims: {weather_aligned.dims}")
+#         print(f"   📍 Target index: {target_index}")
+        
+#         return pollution_aligned, weather_aligned, target_index
+
+class DataAligner:
+    """Alineador de datos de contaminación y meteorología basado en configuración fija."""
+
+    # Configuración fija para uso en procesos de mayor nivel
+    prev_pollutant_hours: int = 24      # Últimas 24 h de contaminación
+    prev_weather_hours:   int = 4       # Últimas 4 h de meteorología antes de target
+    next_weather_hours:   int = 2       # Primeras 2 h de meteorología después de target
+    auto_regressive_steps:int = 24      # Pasos AR a predecir
+
+    @staticmethod
+    def align_weather_pollution_utc6(
+        pollution_data: pd.DataFrame,
+        weather_data: xr.Dataset,
+        target_datetime: str,
+        utc_offset: int = 0,
+        *args: Any,
+        **kwargs: Any
+    ) -> Tuple[pd.DataFrame, xr.Dataset, int]:
         """
+        Alinea datos de contaminación y meteorología usando un índice horario compartido.
+
+        Se ignoran en esta parte, los parámetros  (next_weather_hours, auto_regressive_steps, prev_weather_hours)
+        para mantener compatibilidad con llamadas jerárquicas.
+        La idea es tener los datos suficientes, y alineados para después correr los calculos autorregresivos
+        de forma similar a como se hace en el train.
+        
+        Rango de tiempo:
+          - Desde target_datetime - 24 h (contaminantes históricas)
+          - Hasta target_datetime + (2 + 24) h (meteorología futura + AR)
+
+        Retorna:
+          pollution_aligned: DataFrame reindexado al índice horario completo
+          weather_aligned: Dataset reindexado al mismo índice
+          target_index: posición de target_datetime en el índice
+        """
+        # Parsear target
         target_dt = pd.to_datetime(target_datetime)
-        print(f"🎯 Target datetime (UTC-6): {target_dt}")
+
+        # Construir índice horario completo usando variables de clase
+        start_time = target_dt - pd.Timedelta(hours=DataAligner.prev_pollutant_hours) # quiźa aquí podrí ir el +1 que se tiene después ya con data aligned, porque target_datetime depende que sea..
         
-        # 1. Convertir weather a UTC-6
-        print("🌤️ Convirtiendo weather de UTC a UTC-6...")
+        end_time = target_dt + pd.Timedelta(
+            hours=DataAligner.next_weather_hours + DataAligner.auto_regressive_steps + 2
+        )
+        complete_index = pd.date_range(start=start_time, end=end_time, freq='H')
+
+        # --- Pollution alignment ---
+        pollution_reindexed = pollution_data.reindex(complete_index)
+        pollution_aligned = pollution_reindexed.fillna(0)#-1)
+
+        # --- Weather alignment ---
         weather_aligned = weather_data.copy()
-        weather_aligned['time'] = (pd.to_datetime(weather_data.time.values) + 
-                                 pd.Timedelta(hours=utc_offset))
-        
-        # 2. Filtrar y alinear contaminación
-        print("🏭 Alineando datos de contaminación...")
-        pollution_filtered = pollution_data[pollution_data.index <= target_dt]
-        complete_time_index = pd.date_range(
-            start=weather_aligned.time.min().item(),
-            end=weather_aligned.time.max().item(),
-            freq='H'
+        weather_aligned['time'] = pd.to_datetime(weather_aligned.time.values)
+        weather_aligned = weather_aligned.sel(
+            time=slice(start_time, end_time)
         )
-        
-        pollution_aligned = pd.DataFrame(
-            index=complete_time_index, 
-            columns=pollution_filtered.columns
+        weather_aligned = weather_aligned.reindex(
+            time=complete_index,
+            method='nearest',
+            fill_value=0 ##-1
         )
-        pollution_aligned.loc[pollution_filtered.index, 
-                            pollution_filtered.columns] = pollution_filtered
-        pollution_aligned.fillna(-1, inplace=True)
+
+        # Calcular índice pivote
+        target_index = complete_index.get_loc(target_dt) #+ 1 # -1 porque el target_index es el índice del último dato de la ventana de contaminación
+        print(" pollution_aligned, target_index:")
+        print(pollution_aligned[0:target_index])
         
-        # 3. Encontrar índice objetivo
-        target_index = pollution_aligned.index.get_loc(target_dt)
+        # Calcular índice pivote
+        #target_index = complete_index.get_loc(target_dt) #+ 1 # -1 porque el target_index es el índice del último dato de la ventana de contaminación
+
         
-        print(f"✅ Alineación completada")
-        print(f"   📊 Pollution shape: {pollution_aligned.shape}")
-        print(f"   🌤️ Weather dims: {weather_aligned.dims}")
-        print(f"   📍 Target index: {target_index}")
+        log_to_file(f"pollution_aligned, target_index: {target_index}")
+        log_to_file(f"pollution_aligned[0:target_index]: {pollution_aligned[0:target_index]}")
         
+        # ===== FIN CÓDIGO DE LOGGING TEMPORAL - BORRAR DESPUÉS =====
+        import time
+        time.sleep(3)
+
         return pollution_aligned, weather_aligned, target_index
 
 
@@ -900,9 +1139,13 @@ class ModelInference:
             Tupla (x_pollution, x_weather)
         """
         print("🔧 Preparando tensores de entrada...")
-        
+        # Ventana de contaminación
+        target_index = target_index + 0
+
+        shift_index_pollution = 0  # debugging de forecast para pollution
+        required_start_index = target_index - prev_pollutant_hours  # + 1 #+ shift_index_pollution
         # Validar que hay suficientes datos históricos
-        required_start_index = target_index - prev_pollutant_hours + 1
+        #required_start_index = target_index - prev_pollutant_hours + 1
         if required_start_index < 0:
             raise ValueError(
                 f"No hay suficientes datos históricos. "
@@ -919,21 +1162,25 @@ class ModelInference:
             )
         
         print(f"   📊 Validación exitosa: target_index={target_index}, "
-              f"rango=[{required_start_index}:{target_index + 1}]")
+              f"rango=[{required_start_index}:{target_index}]")
         
         # Ventana de contaminación
-        pollution_window = pollution_aligned.iloc[required_start_index:target_index + 1]
-        
+        # pollution_window = pollution_aligned.iloc[required_start_index:target_index + 1] # ver lina 253 en data_sets.py, quizá esté mejor ser parecido a train and so on..
+        # x_pollution = self.x_input_data.iloc[idx-self.prev_pollutant_hours:idx]
+
+        pollution_window = pollution_aligned.iloc[target_index-prev_pollutant_hours:target_index ] # similar a line 253
+
         # Verificar que la ventana tiene el tamaño correcto
-        if len(pollution_window) != prev_pollutant_hours:
-            raise ValueError(
-                f"Ventana de contaminación tiene tamaño incorrecto. "
-                f"Esperado: {prev_pollutant_hours}, obtenido: {len(pollution_window)}"
-            )
+        #if len(pollution_window) != prev_pollutant_hours:
+        #    raise ValueError(
+        #        f"Ventana de contaminación tiene tamaño incorrecto. "
+        #        f"Esperado: {prev_pollutant_hours}, obtenido: {len(pollution_window)}"
+        #    )
         
         # Ventana de meteorología
-        weather_start_index = target_index - prev_weather_hours
-        weather_end_index = target_index + next_weather_hours + auto_regressive_steps
+        # linea 254 en data_sets.py:         x_weather = self.weather_data[idx-self.prev_weather_hours:idx + self.next_weather_hours + self.auto_regresive_steps]
+        weather_start_index = target_index - prev_weather_hours  +2 # y para weaaather inspirarse en linea 254.. de data_sets.py
+        weather_end_index = target_index + next_weather_hours + auto_regressive_steps +2
         
         # Validar índices meteorológicos
         if weather_start_index < 0:
@@ -944,11 +1191,35 @@ class ModelInference:
             )
         
         if weather_end_index > len(weather_aligned.time):
+            print(f"⚠️  DATOS METEOROLÓGICOS INSUFICIENTES:")
+            print(f"   - Requeridos hasta índice: {weather_end_index}")
+            print(f"   - Disponibles: {len(weather_aligned.time)} timesteps")
+            print(f"   - Faltantes: {weather_end_index - len(weather_aligned.time)} timesteps")
+            print(f"   - 🔧 SOLUCIÓN: Rellenando con último valor disponible")
             raise ValueError(
-                f"No hay suficientes datos meteorológicos futuros. "
-                f"Se requieren hasta el índice {weather_end_index}, "
-                f"pero solo hay {len(weather_aligned.time)} timesteps disponibles."
-            )
+                f"weather_end_index > len(weather_aligned.time):")
+            # Extender weather_aligned repitiendo el último timestep
+            missing_timesteps = weather_end_index - len(weather_aligned.time)
+            last_time = weather_aligned.time[-1]
+            
+            # Crear timesteps adicionales
+            additional_times = []
+            for i in range(1, missing_timesteps + 1):
+                additional_times.append(last_time + pd.Timedelta(hours=i))
+            
+            # Replicar último dato meteorológico
+            last_weather_data = weather_aligned.isel(time=-1)
+            extended_data_list = [weather_aligned]
+            
+            for new_time in additional_times:
+                new_data = last_weather_data.copy()
+                new_data['time'] = new_time
+                extended_data_list.append(new_data.expand_dims('time'))
+            
+            # Combinar datos extendidos
+            weather_aligned = xr.concat(extended_data_list, dim='time')
+            
+            print(f"   ✅ Weather extendido a {len(weather_aligned.time)} timesteps")
         
         weather_window = weather_aligned.isel(
             time=slice(weather_start_index, weather_end_index)
@@ -956,6 +1227,9 @@ class ModelInference:
         
         print(f"   🌤️ Ventana meteorológica: [{weather_start_index}:{weather_end_index}] "
               f"= {len(weather_window.time)} timesteps")
+        log_to_file(f"   🌤️ Ventana meteorológica: [{weather_start_index}:{weather_end_index}] "
+              f"= {len(weather_window.time)} timesteps "
+              f"[{weather_window.time[0].values}:{weather_window.time[-1].values}]")
         
         # Convertir a tensores
         x_pollution = torch.tensor(
@@ -1095,9 +1369,9 @@ class ModelInference:
         
         for step in range(auto_regressive_steps):
             # Datetime de predicción
-            pred_datetime = target_dt + pd.Timedelta(hours=step + 1)
+            pred_datetime = target_dt + pd.Timedelta(hours=step) # +1 porque el step es 0-based, y el forecast es +1
             
-            # Ventana meteorológica para este paso
+            # Ventana meteorológica para este paso # esete paso se puede shiftear un poco el weather maybe... primero ver que no trune al quitar el +1 que tenía.
             weather_start = step
             weather_end = step + weather_window_size
             current_weather = x_weather[:, weather_start:weather_end, :, :, :]
@@ -1337,14 +1611,14 @@ class ForecastSystem:
             print("🚀 INICIANDO PRONÓSTICO COMPLETO")
             print("=" * 60)
             
-            # 1. Procesar archivos WRF (ejecutar operativo001.py)
+            # 1. Procesar archivos WRF (ejecutar process_wrf_files_like_in_train.py)
             print("\n1️⃣ PROCESANDO ARCHIVOS WRF")
             wrf_success = self.wrf_processor.process_wrf_files(
-                target_datetime, config_file_path, verbose=True
+                target_datetime, config_file_path, output_folder=str(self.wrf_loader.wrf_folder), verbose=True
             )
             
             if not wrf_success:
-                raise Exception("Error procesando archivos WRF con operativo001.py")
+                raise Exception("Error procesando archivos WRF con process_wrf_files_like_in_train.py")
             
             # 2. Cargar datos meteorológicos
             print("\n2️⃣ CARGANDO DATOS METEOROLÓGICOS")
@@ -1353,14 +1627,97 @@ class ForecastSystem:
             # 3. Obtener datos de contaminación
             print("\n3️⃣ OBTENIENDO DATOS DE CONTAMINACIÓN")
             min_required_hours = self.config['data_loader']['args']['prev_pollutant_hours']
+            
+            # DIAGNÓSTICO: Verificar si necesitamos más horas de contaminación
+            auto_regressive_steps = self.config['test']['data_loader']['auto_regresive_steps']
+            next_weather_hours = self.config['data_loader']['args']['next_weather_hours']
+            total_hours_needed = min_required_hours + auto_regressive_steps + next_weather_hours + 10  # +10 buffer
+            
+            print(f"🔍 DIAGNÓSTICO DE DATOS DE CONTAMINACIÓN:")
+            print(f"   - Horas previas requeridas: {min_required_hours}")
+            print(f"   - Pasos autorregresivos: {auto_regressive_steps}")
+            print(f"   - Horas weather futuras: {next_weather_hours}")
+            print(f"   - Total estimado necesario: {total_hours_needed}")
+            
+            # Usar más horas si es necesario
+            hours_back_to_use = max(30, total_hours_needed)
+            print(f"   - Horas a consultar: {hours_back_to_use}")
+            
             pollution_data, imputed_data = self.pollution_manager.get_contaminant_data(
                 target_datetime, 
-                hours_back=30,
+                hours_back=hours_back_to_use,
                 min_required_hours=min_required_hours
             )
             
-            # 4. Normalizar datos
-            print("\n4️⃣ NORMALIZANDO DATOS")
+            print(f"📊 DATOS DE CONTAMINACIÓN OBTENIDOS:")
+            print(f"   - Shape: {pollution_data.shape}")
+            print(f"   - Rango temporal: {pollution_data.index.min()} → {pollution_data.index.max()}")
+            print(f"   - Horas disponibles: {len(pollution_data)}")
+            
+            # VALIDACIÓN: Verificar si tenemos suficientes datos
+            if len(pollution_data) < 15:
+                raise ValueError(f"❌ DATOS INSUFICIENTES: Solo {len(pollution_data)} horas de contaminación. Mínimo 15 horas.")
+            
+            if len(pollution_data) < min_required_hours:
+                print(f"⚠️  ADVERTENCIA: Solo {len(pollution_data)} horas disponibles, pero se necesitan {min_required_hours}")
+                print(f"   Se rellenarán espacios faltantes con NaN")
+            
+            # 4. Imputar datos faltantes
+            print("\n4️⃣ IMPUTANDO DATOS FALTANTES")
+
+            # Identificar columnas de contaminantes
+            pollutant_columns = [col for col in pollution_data.columns if col.startswith('cont_')]
+            print(pollution_data)
+            log_to_file(f"pollution_data: {pollution_data}")
+            import time
+            time.sleep(1)
+            
+            if pollutant_columns:
+                print(f"   🔍 Detectadas {len(pollutant_columns)} columnas de contaminantes")
+                
+                # Verificar si hay valores faltantes
+                imputation_mgr = ImputationManager(self.db_manager)
+                
+                if imputation_mgr.check_for_missing_values(pollution_data, pollutant_columns):
+                    missing_counts = imputation_mgr.get_missing_values_count(pollution_data, pollutant_columns)
+                    total_missing = sum(missing_counts.values())
+                    
+                    print(f"   ⚠️ Detectados {total_missing} valores faltantes:")
+                    for col, count in missing_counts.items():
+                        if count > 0:
+                            print(f"      {col}: {count} valores NaN")
+                    
+                    # Preparar datos para imputación
+                    print("   🔧 Preparando datos para imputación...")
+                    pollution_data = imputation_mgr.prepare_data_for_imputation(pollution_data, pollutant_columns)
+                    
+                    # Aplicar pipeline de imputación
+                    print("   🚀 Aplicando pipeline de imputación...")
+                    pollution_data = imputation_mgr.apply_imputation_pipeline(pollution_data, pollutant_columns, years_back=5)
+                    
+                    # Generar resumen de imputación
+                    imputation_summary = imputation_mgr.get_imputation_summary(pollution_data, pollutant_columns)
+                    print("   📊 Resumen de imputación:")
+                    for col in pollutant_columns:
+                        if col in imputation_summary:
+                             stats = imputation_summary.get(f"{col}_stats", {})
+                            if stats:
+                                print(f"      {col}: {stats['imputation_rate']} de valores imputados")
+                    
+                    # Limpiar columnas de banderas para el procesamiento posterior
+                    flag_columns = [col for col in pollution_data.columns if col.startswith('i_cont_')]
+                    pollution_data = pollution_data.drop(columns=flag_columns)
+                    print("   🧹 Columnas de banderas eliminadas")
+                    
+                else:
+                    print("   ✅ No se detectaron valores faltantes - omitiendo imputación")
+            else:
+                print("   ⚠️ No se detectaron columnas de contaminantes")
+
+            print(pollution_data)
+                        
+            # 5. Normalizar datos
+            print("\n5️⃣ NORMALIZANDO DATOS")
             norm_params_file = self.config['data_loader']['args']['norm_params_file']
             pollution_normalized, weather_normalized = normalize_data(
                 norm_params_file, pollution_data, weather_data
@@ -1373,7 +1730,9 @@ class ForecastSystem:
             # 6. Alinear datos
             print("\n6️⃣ ALINEANDO DATOS TEMPORALMENTE")
             pollution_aligned, weather_aligned, target_index = DataAligner.align_weather_pollution_utc6(
-                pollution_processed, weather_normalized, target_datetime
+                pollution_processed, weather_normalized, target_datetime,
+                next_weather_hours=next_weather_hours, 
+                auto_regressive_steps=auto_regressive_steps
             )
             
             # 7. Preparar tensores
@@ -1385,6 +1744,39 @@ class ForecastSystem:
                 self.config['data_loader']['args']['next_weather_hours'],
                 self.config['test']['data_loader']['auto_regresive_steps']
             )
+            
+            log_to_file(f"pollution_aligned: {pollution_aligned}")
+            
+            # ===== INICIO CÓDIGO DE LOGGING TEMPORAL - BORRAR DESPUÉS =====
+            # Logging de columnas para verificar orden contra referencia
+            log_to_file("================================================")
+            log_to_file("📋 COLUMNAS DE POLLUTION_ALIGNED (ORDEN ACTUAL):")
+            log_to_file(f"Total columnas: {len(pollution_aligned.columns)}")
+            
+            # Listar todas las columnas en orden
+            for i, col in enumerate(pollution_aligned.columns):
+                log_to_file(f"  {i+1:2d}. {col}")
+            
+            log_to_file("================================================")
+            log_to_file("📋 REFERENCIA DE COLUMNAS ESPERADAS:")
+
+            
+            log_to_file("================================================")
+            # ===== FIN CÓDIGO DE LOGGING TEMPORAL - BORRAR DESPUÉS =====
+            
+            # Ver las fechas del xarray
+            log_to_file(f"weather_aligned time range: {weather_aligned.time.min().values} to {weather_aligned.time.max().values}")
+            
+            # Ver las fechas del xarray
+            log_to_file(f"weather_aligned time range: {weather_aligned.time.min().values} to {weather_aligned.time.max().values}")
+            log_to_file(f"weather_aligned time size: {len(weather_aligned.time)}")
+            log_to_file(f"weather_aligned first 5 times: {weather_aligned.time.isel(time=slice(0,5)).values}")
+            log_to_file(f"weather_aligned last 5 times: {weather_aligned.time.isel(time=slice(-5,None)).values}")
+            log_to_file(f"target_index: {target_index}")
+            log_to_file(f"================================================")
+            #log_to_file(f"x_pollution[target_index]: {x_pollution[target_index]}")
+            #log_to_file(f"x_weather[target_index]: {x_weather[target_index]}")
+
             
             # 8. Ejecutar inferencia
             print("\n8️⃣ EJECUTANDO INFERENCIA")
