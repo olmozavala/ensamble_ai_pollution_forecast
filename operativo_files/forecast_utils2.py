@@ -602,7 +602,8 @@ class WRFProcessor:
         #sys.exit(0)  # termina el programa con código de salida 0
         # fallback_script = 'temporal_slice2.py' #'temporal_slice_extractor_mockup.py'
         # fallback_script = 'temporal_slice_extractor_mockup.py'        
-        fallback_script = 'temporal_slice3.py'
+        #fallback_script = 'temporal_slice3.py'
+        fallback_script = 'temporal_slice4.py'
         if verbose:
             print(f"🔄 EJECUTANDO FALLBACK: {fallback_script}")
             print(f"📅 Fecha objetivo: {target_datetime}")
@@ -1376,7 +1377,14 @@ class ModelInference:
             weather_end = step + weather_window_size
             current_weather = x_weather[:, weather_start:weather_end, :, :, :]
             
-            print(f"   🔄 Paso {step + 1}/{auto_regressive_steps} - {pred_datetime}")
+            # print(f"   🔄 Paso {step + 1}/{auto_regressive_steps} - {pred_datetime}")
+            # print(f"   🔄 current_weather: {current_weather.shape}")
+            # print(f"   🔄 x_weather: {x_weather.shape}")
+            # print(f"   🔄 x_weather: {x_weather}")            
+            # print(f"   🔄 x_pollution: {x_pollution.shape}")
+            # # Primer field 25x25
+            # primer_field = current_weather[0, 0, :, :]  # variable 0, primer tiempo, todas lat/lon
+            # print(f"   🔄 primer_field: {primer_field}")
             
             # Guardar input vectors si está habilitado
             if save_input_vectors and pollution_aligned is not None and weather_aligned is not None:
@@ -1700,7 +1708,7 @@ class ForecastSystem:
                     print("   📊 Resumen de imputación:")
                     for col in pollutant_columns:
                         if col in imputation_summary:
-                             stats = imputation_summary.get(f"{col}_stats", {})
+                            stats = imputation_summary.get(f"{col}_stats", {})
                             if stats:
                                 print(f"      {col}: {stats['imputation_rate']} de valores imputados")
                     
@@ -1734,6 +1742,12 @@ class ForecastSystem:
                 next_weather_hours=next_weather_hours, 
                 auto_regressive_steps=auto_regressive_steps
             )
+            primer_t2_valores = weather_aligned['T2'].isel(time=0).compute()
+            print(primer_t2_valores.values)  # Esto imprime el arreglo numpy real
+            # Último valor de T2
+            ultimo_t2_valores = weather_aligned['T2'].isel(time=-1).compute()
+            print(ultimo_t2_valores.values)  # Imprime el arreglo numpy real
+            
             
             # 7. Preparar tensores
             print("\n7️⃣ PREPARANDO TENSORES DE ENTRADA")
